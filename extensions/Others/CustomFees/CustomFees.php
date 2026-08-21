@@ -5,9 +5,14 @@ namespace Paymenter\Extensions\Others\CustomFees;
 use App\Attributes\ExtensionMeta;
 use App\Classes\Extension\Extension;
 use App\Helpers\ExtensionHelper;
+use App\Models\Category;
+use App\Models\Product;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Html;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\HtmlString;
 use Paymenter\Extensions\Others\CustomFees\Admin\Resources\FeeResource;
+use Paymenter\Extensions\Others\CustomFees\Models\Fee;
 
 #[ExtensionMeta(
     name: 'Custom Fees',
@@ -41,6 +46,40 @@ class CustomFees extends Extension
 
     public function boot()
     {
+        // Dynamic Eloquent relations on Product and Category models
+        Product::resolveRelationUsing('fees', function ($product) {
+            return $product->morphToMany(Fee::class, 'feeable');
+        });
+
+        Category::resolveRelationUsing('fees', function ($category) {
+            return $category->morphToMany(Fee::class, 'feeable');
+        });
+
+        // Automatically inject $fees into all checkout views across ALL themes
+        View::composer(['products.checkout', '*products.checkout*', '*checkout*'], function ($view) {
+            $data = $view->getData();
+            if (isset($data['product']) && $data['product'] instanceof Product) {
+                $product = $data['product'];
+                $total = $data['total'] ?? null;
+                $baseSubtotal = (float) ($total?->subtotal ?: ($total?->price ?? 0));
+
+                $applicableFees = Fee::forProduct($product);
+                $feeList = [];
+                foreach ($applicableFees as $fee) {
+                    $feeAmount = $fee->calculateFee($baseSubtotal);
+                    $feeList[] = [
+                        'name' => $fee->name,
+                        'rate' => (float) $fee->rate,
+                        'amount' => $feeAmount,
+                        'formatted_rate' => rtrim(rtrim(number_format($fee->rate, 2), '0'), '.') . '%',
+                    ];
+                }
+
+                $view->with('fees', $feeList);
+                $view->with('applicableFees', $applicableFees);
+            }
+        });
+
         Event::listen('permissions', function () {
             return [
                 'admin.custom_fees.view' => 'View Custom Fees',

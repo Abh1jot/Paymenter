@@ -7,6 +7,7 @@ use App\Models\Model;
 use App\Models\Product;
 use App\Models\Traits;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Facades\Schema;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class Fee extends Model implements Auditable
@@ -41,7 +42,7 @@ class Fee extends Model implements Auditable
      */
     public function calculateFee(float $price): float
     {
-        return round($price * $this->rate / 100, 2);
+        return round($price * ((float) $this->rate) / 100, 2);
     }
 
     /**
@@ -49,21 +50,28 @@ class Fee extends Model implements Auditable
      */
     public static function forProduct(Product $product)
     {
-        if (!\Illuminate\Support\Facades\Schema::hasTable('fees')) {
+        if (!Schema::hasTable('fees') || !Schema::hasTable('feeables')) {
             return collect();
         }
 
+        // Direct product fees
         $productFees = static::where('enabled', true)
             ->whereHas('products', function ($q) use ($product) {
                 $q->where('products.id', $product->id);
             })
             ->get();
 
+        // Category fees (direct category and parent categories)
         $categoryFees = collect();
         if ($product->category_id) {
+            $categoryIds = [$product->category_id];
+            if ($product->category && $product->category->parent_id) {
+                $categoryIds[] = $product->category->parent_id;
+            }
+
             $categoryFees = static::where('enabled', true)
-                ->whereHas('categories', function ($q) use ($product) {
-                    $q->where('categories.id', $product->category_id);
+                ->whereHas('categories', function ($q) use ($categoryIds) {
+                    $q->whereIn('categories.id', $categoryIds);
                 })
                 ->get();
         }

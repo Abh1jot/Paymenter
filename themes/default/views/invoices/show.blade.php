@@ -119,7 +119,22 @@
                 </table>
             </div>
             <div class="space-y-3 sm:text-right sm:ml-auto sm:w-72 mt-10">
-                @if ($invoice->formattedTotal->tax > 0)
+                @php
+                    $invoiceFees = collect();
+                    foreach ($invoice->items as $item) {
+                        if ($item->reference_type === 'App\Models\Service' && $item->reference?->product) {
+                            $productFees = class_exists(\Paymenter\Extensions\Others\CustomFees\Models\Fee::class)
+                                ? \Paymenter\Extensions\Others\CustomFees\Models\Fee::forProduct($item->reference->product)
+                                : collect();
+                            foreach ($productFees as $fee) {
+                                if (!$invoiceFees->contains('id', $fee->id)) {
+                                    $invoiceFees->push($fee);
+                                }
+                            }
+                        }
+                    }
+                @endphp
+                @if ($invoice->formattedTotal->tax > 0 || $invoiceFees->isNotEmpty())
                 <div class="flex justify-between">
                     <div class="text-sm font-medium text-gray-500 uppercase dark:text-base">{{ __('invoices.subtotal') }}
                     </div>
@@ -127,6 +142,18 @@
                         {{ $invoice->formattedTotal->format($invoice->formattedTotal->subtotal) }}
                     </div>
                 </div>
+                @endif
+                @foreach ($invoiceFees as $fee)
+                <div class="flex justify-between">
+                    <div class="text-sm font-medium text-gray-500 uppercase dark:text-base">
+                        {{ $fee->name }} ({{ rtrim(rtrim(number_format($fee->rate, 2), '0'), '.') }}%)
+                    </div>
+                    <div class="text-sm font-medium text-gray-900 dark:text-white">
+                        {{ __('invoices.included') ?? 'Included' }}
+                    </div>
+                </div>
+                @endforeach
+                @if ($invoice->formattedTotal->tax > 0)
                 <div class="flex justify-between">
                     <div class="text-sm font-medium text-gray-500 uppercase dark:text-base">
                         {{ $invoice->tax->name }} ({{ $invoice->tax->rate }}%)
