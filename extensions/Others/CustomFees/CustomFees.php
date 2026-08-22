@@ -3,10 +3,14 @@
 namespace Paymenter\Extensions\Others\CustomFees;
 
 use App\Attributes\ExtensionMeta;
+use App\Classes\Cart as ClassesCart;
 use App\Classes\Extension\Extension;
+use App\Events\InvoiceItem\Created as InvoiceItemCreated;
 use App\Helpers\ExtensionHelper;
 use App\Models\Category;
+use App\Models\InvoiceItem;
 use App\Models\Product;
+use App\Models\Service;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\View;
@@ -17,12 +21,17 @@ use Paymenter\Extensions\Others\CustomFees\Models\Fee;
 #[ExtensionMeta(
     name: 'Custom Fees',
     description: 'Add custom percentage fees to specific products or entire categories, automatically displaying fee breakdowns on checkout and invoices across all themes.',
-    version: '1.0.0',
+    version: '1.1.0',
     author: 'Azion Cloud',
     icon: 'ri-percent-line'
 )]
 class CustomFees extends Extension
 {
+    /**
+     * Guard flag to prevent infinite recursion when creating fee invoice items.
+     */
+    private static bool $addingFeeItems = false;
+
     public function getConfig($values = [])
     {
         return [
@@ -55,153 +64,16 @@ class CustomFees extends Extension
             return $category->morphToMany(Fee::class, 'feeable');
         });
 
-        // 2. Register lightweight API route for fee data
+        // 2. View Composer: inject $cartFees into the cart view for ALL themes
+        $this->registerCartFeeComposer();
+
+        // 3. Listen for InvoiceItem creation to add fee line items on invoices
+        $this->registerInvoiceItemListener();
+
+        // 4. Keep the lightweight API route as fallback for themes that use JS
         $this->registerFeeApiRoute();
 
-        // 3. Inject fees display via the footer hook (works on EVERY theme)
-        // CRITICAL: Paymenter hook() / renderEvent() requires returning ['view' => '<html>']
-        Event::listen('footer', function () {
-            try {
-                if (!Schema::hasTable('fees') || !Schema::hasTable('feeables')) {
-                    return null;
-                }
-            } catch (\Exception $e) {
-                return null;
-            }
-
-            $path = request()->path();
-            if (!str_contains($path, 'checkout')) {
-                return null;
-            }
-
-            $feesApiUrl = url('/custom-fees/api/product-fees');
-
-            return [
-                'view' => '<script data-extension="custom-fees">
-(function() {
-    "use strict";
-    var path = window.location.pathname;
-    if (path.indexOf("checkout") === -1) return;
-
-    var API_URL = "' . $feesApiUrl . '";
-    var lastSlug = null;
-    var feesCache = null;
-
-    function getSlugs() {
-        var parts = path.split("/").filter(Boolean);
-        var ci = parts.indexOf("checkout");
-        if (ci < 1) return null;
-        return { product: parts[ci - 1], category: ci >= 2 ? parts[ci - 2] : "" };
-    }
-
-    function formatRate(r) {
-        var s = parseFloat(r).toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-        return s + "%";
-    }
-
-    function fetchAndInject() {
-        var slugs = getSlugs();
-        if (!slugs) return;
-
-        if (slugs.product === lastSlug && feesCache) {
-            injectFees(feesCache);
-            return;
-        }
-
-        fetch(API_URL + "?product=" + encodeURIComponent(slugs.product) + "&category=" + encodeURIComponent(slugs.category))
-            .then(function(r) { return r.json(); })
-            .then(function(fees) {
-                feesCache = fees;
-                lastSlug = slugs.product;
-                injectFees(fees);
-            })
-            .catch(function() {});
-    }
-
-    function injectFees(fees) {
-        if (!fees || !fees.length) return;
-
-        // Remove previous injections
-        var old = document.querySelectorAll(".custom-fees-injected");
-        for (var i = 0; i < old.length; i++) old[i].remove();
-
-        // Find checkout button
-        var btns = document.querySelectorAll("button");
-        var checkoutBtn = null;
-        for (var i = 0; i < btns.length; i++) {
-            var wc = btns[i].getAttribute("wire:click");
-            if (wc && wc.indexOf("checkout") !== -1) {
-                checkoutBtn = btns[i];
-                break;
-            }
-        }
-        if (!checkoutBtn) return;
-
-        // Walk up to find the summary container
-        var container = checkoutBtn;
-        for (var i = 0; i < 10; i++) {
-            container = container.parentElement;
-            if (!container) return;
-            var headings = container.querySelectorAll("h2, h3, h4");
-            if (headings.length > 0) break;
-        }
-        if (!container) return;
-
-        // Find total row (usually has text-lg class)
-        var totalRow = container.querySelector(".text-lg");
-        if (!totalRow) {
-            // fallback: insert before button parent
-            totalRow = checkoutBtn.closest("div");
-        }
-        if (!totalRow) return;
-
-        // Create fee rows and insert before total
-        var frag = document.createDocumentFragment();
-        fees.forEach(function(fee) {
-            var div = document.createElement("div");
-            div.className = "custom-fees-injected font-semibold flex justify-between text-sm";
-            div.style.cssText = "padding: 2px 0;";
-            div.innerHTML = "<span>" + fee.name + " (" + formatRate(fee.rate) + "):</span><span>" + fee.formatted_amount + "</span>";
-            frag.appendChild(div);
-        });
-
-        totalRow.parentElement.insertBefore(frag, totalRow);
-    }
-
-    // Initial run
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", fetchAndInject);
-    } else {
-        setTimeout(fetchAndInject, 200);
-    }
-
-    // Re-run after Livewire morphs (plan/option changes)
-    document.addEventListener("livewire:init", function() {
-        if (window.Livewire) {
-            Livewire.hook("morph.updated", function() {
-                setTimeout(fetchAndInject, 200);
-            });
-        }
-    });
-
-    // Fallback observer
-    var obsTimer = null;
-    var obs = new MutationObserver(function() {
-        clearTimeout(obsTimer);
-        obsTimer = setTimeout(function() {
-            if (!document.querySelector(".custom-fees-injected")) {
-                fetchAndInject();
-            }
-        }, 300);
-    });
-    obs.observe(document.body, { childList: true, subtree: true });
-    setTimeout(function() { obs.disconnect(); }, 30000);
-})();
-</script>',
-            ];
-        });
-
-        // 4. Register permissions
+        // 5. Register permissions
         Event::listen('permissions', function () {
             return [
                 'admin.custom_fees.view' => 'View Custom Fees',
@@ -212,6 +84,136 @@ class CustomFees extends Extension
         });
     }
 
+    /**
+     * Register a View Composer that injects $cartFees into the cart view.
+     * This works with ANY theme that renders the 'cart' view.
+     */
+    protected function registerCartFeeComposer()
+    {
+        View::composer('cart', function ($view) {
+            try {
+                if (!Schema::hasTable('fees') || !Schema::hasTable('feeables')) {
+                    $view->with('cartFees', []);
+                    return;
+                }
+
+                $cartItems = ClassesCart::items();
+                if (!$cartItems || $cartItems->isEmpty()) {
+                    $view->with('cartFees', []);
+                    return;
+                }
+
+                // Collect all fees across all cart items, aggregated by fee ID
+                $aggregatedFees = [];
+
+                foreach ($cartItems as $item) {
+                    $product = $item->product;
+                    if (!$product) continue;
+
+                    $fees = Fee::forProduct($product);
+                    if ($fees->isEmpty()) continue;
+
+                    // Get the item's base price (before fees)
+                    $basePrice = (float) ($item->price->price ?? 0);
+
+                    foreach ($fees as $fee) {
+                        $feeAmount = $fee->calculateFee($basePrice) * $item->quantity;
+
+                        if (isset($aggregatedFees[$fee->id])) {
+                            $aggregatedFees[$fee->id]['amount'] += $feeAmount;
+                        } else {
+                            $aggregatedFees[$fee->id] = [
+                                'name' => $fee->name,
+                                'rate' => (float) $fee->rate,
+                                'amount' => $feeAmount,
+                            ];
+                        }
+                    }
+                }
+
+                $view->with('cartFees', array_values($aggregatedFees));
+            } catch (\Exception $e) {
+                $view->with('cartFees', []);
+            }
+        });
+    }
+
+    /**
+     * Listen for InvoiceItem\Created events and add fee line items.
+     * This covers:
+     *   - New order checkout (Cart.php)
+     *   - Recurring/renewal invoices (CronJob.php)
+     *   - Admin-created orders (CreateOrder.php)
+     *   - Service upgrades (Upgrade.php)
+     */
+    protected function registerInvoiceItemListener()
+    {
+        Event::listen(InvoiceItemCreated::class, function (InvoiceItemCreated $event) {
+            // Guard: prevent infinite recursion when we create fee items
+            if (self::$addingFeeItems) {
+                return;
+            }
+
+            try {
+                if (!Schema::hasTable('fees') || !Schema::hasTable('feeables')) {
+                    return;
+                }
+
+                $invoiceItem = $event->invoiceItem;
+
+                // Only process invoice items that reference a Service
+                if ($invoiceItem->reference_type !== Service::class) {
+                    return;
+                }
+
+                $service = Service::find($invoiceItem->reference_id);
+                if (!$service || !$service->product) {
+                    return;
+                }
+
+                $fees = Fee::forProduct($service->product);
+                if ($fees->isEmpty()) {
+                    return;
+                }
+
+                $invoice = $invoiceItem->invoice;
+                if (!$invoice) {
+                    return;
+                }
+
+                // Base price for fee calculation = the invoice item's price
+                $basePrice = (float) $invoiceItem->price;
+
+                // Set guard flag before creating fee items
+                self::$addingFeeItems = true;
+
+                try {
+                    foreach ($fees as $fee) {
+                        $feeAmount = $fee->calculateFee($basePrice);
+                        if ($feeAmount <= 0) continue;
+
+                        $invoice->items()->create([
+                            'reference_id' => $service->id,
+                            'reference_type' => Service::class,
+                            'price' => $feeAmount,
+                            'quantity' => $invoiceItem->quantity,
+                            'description' => $fee->name . ' (' . rtrim(rtrim(number_format($fee->rate, 2), '0'), '.') . '%)',
+                        ]);
+                    }
+                } finally {
+                    // Always reset the guard flag
+                    self::$addingFeeItems = false;
+                }
+            } catch (\Exception $e) {
+                self::$addingFeeItems = false;
+                report($e);
+            }
+        });
+    }
+
+    /**
+     * Register lightweight API route for fee data (fallback for JS-based themes).
+     */
     protected function registerFeeApiRoute()
     {
         $router = app('router');
