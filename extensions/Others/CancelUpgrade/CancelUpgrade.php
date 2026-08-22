@@ -9,7 +9,6 @@ use App\Models\Service;
 use App\Models\ServiceUpgrade;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\View;
-use Illuminate\Support\HtmlString;
 
 #[ExtensionMeta(
     name: 'Cancel Upgrade',
@@ -26,30 +25,37 @@ class CancelUpgrade extends Extension
         require __DIR__ . '/routes/web.php';
         View::addNamespace('cancel-upgrade', __DIR__ . '/resources/views');
 
-        // 2. Hook into service detail pages (Standard Paymenter theme hook)
-        Event::listen('pages.services.show', function ($data) {
-            $service = $data['service'] ?? null;
-            if (!$service instanceof Service) {
-                return null;
-            }
-
-            return [
-                'view' => view('cancel-upgrade::button', ['service' => $service]),
-            ];
-        });
-
-        // 3. Universal fallback hook via footer (for themes that do not implement pages.services.show hook)
+        // 2. Universal footer hook for service pages (works on ALL themes)
+        // CRITICAL: Paymenter hook() / renderEvent() requires returning ['view' => '<html>']
         Event::listen('footer', function () {
-            if (!request()->routeIs('services.show') && !str_starts_with(request()->path(), 'services/')) {
+            $path = request()->path();
+
+            // Only run on service detail pages
+            if (!str_starts_with($path, 'services/') && !str_contains($path, 'services')) {
                 return null;
             }
 
+            // Try to get service from route
             $service = request()->route('service');
-            if (!$service instanceof Service && is_numeric($service)) {
+            if ($service instanceof Service) {
+                // Good, we have a Service model
+            } elseif (is_numeric($service)) {
                 $service = Service::find($service);
+            } else {
+                // Try to find service ID from URL path
+                $parts = explode('/', trim($path, '/'));
+                $servicesIdx = array_search('services', $parts);
+                if ($servicesIdx !== false && isset($parts[$servicesIdx + 1]) && is_numeric($parts[$servicesIdx + 1])) {
+                    $service = Service::find($parts[$servicesIdx + 1]);
+                }
             }
 
             if (!$service) {
+                return null;
+            }
+
+            // Check if this service belongs to the current user
+            if (auth()->guest() || $service->user_id !== auth()->id()) {
                 return null;
             }
 
@@ -57,58 +63,54 @@ class CancelUpgrade extends Extension
                 ->where('status', ServiceUpgrade::STATUS_PENDING)
                 ->first();
 
-            $unpaidInvoice = $pendingUpgrade?->invoice && $pendingUpgrade->invoice->status === Invoice::STATUS_PENDING
+            if (!$pendingUpgrade) {
+                return null;
+            }
+
+            $unpaidInvoice = $pendingUpgrade->invoice && $pendingUpgrade->invoice->status === Invoice::STATUS_PENDING
                 ? $pendingUpgrade->invoice
                 : null;
 
-            if ($pendingUpgrade && $unpaidInvoice) {
-                $invoiceUrl = route('invoices.show', $unpaidInvoice);
-                $cancelUrl = route('services.cancel-upgrade', $service);
-                $csrfToken = csrf_token();
-
-                return new HtmlString(<<<HTML
-<script data-extension="cancel-upgrade">
-(function() {
-    function injectCancelBanner() {
-        if (document.querySelector('.cancel-upgrade-banner')) return;
-
-        const mainContainer = document.querySelector('main') || document.querySelector('.container') || document.querySelector('#app') || document.body;
-        if (!mainContainer) return;
-
-        const banner = document.createElement('div');
-        banner.className = 'cancel-upgrade-banner p-4 mb-6 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg max-w-7xl mx-auto my-4';
-        banner.innerHTML = `
-            <div>
-                <h4 class="font-semibold text-sm text-amber-300">Pending Upgrade in Progress</h4>
-                <p class="text-xs text-amber-200/80 mt-0.5">This service has an unpaid upgrade invoice #{$unpaidInvoice->id}. Pay the invoice to complete the upgrade, or cancel it below to unlock the service.</p>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-                <a href="{$invoiceUrl}" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 text-black hover:bg-amber-400 transition-colors">
-                    Pay Invoice
-                </a>
-                <form action="{$cancelUrl}" method="POST" onsubmit="return confirm('Are you sure you want to cancel this pending upgrade and its invoice?');" style="display:inline;">
-                    <input type="hidden" name="_token" value="{$csrfToken}">
-                    <button type="submit" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 transition-colors">
-                        Cancel Upgrade
-                    </button>
-                </form>
-            </div>
-        `;
-
-        mainContainer.insertBefore(banner, mainContainer.firstChild);
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', injectCancelBanner);
-    } else {
-        injectCancelBanner();
-    }
-})();
-</script>
-HTML);
+            if (!$unpaidInvoice) {
+                return null;
             }
 
-            return null;
+            $invoiceUrl = route('invoices.show', $unpaidInvoice);
+            $cancelUrl = route('services.cancel-upgrade', $service);
+            $csrfToken = csrf_token();
+            $invoiceId = $unpaidInvoice->id;
+
+            return [
+                'view' => '<script data-extension="cancel-upgrade">
+(function() {
+    function injectCancelBanner() {
+        if (document.querySelector(".cancel-upgrade-banner")) return;
+
+        var main = document.querySelector("main") || document.querySelector(".container") || document.querySelector("#app") || document.body;
+        if (!main) return;
+
+        var banner = document.createElement("div");
+        banner.className = "cancel-upgrade-banner";
+        banner.style.cssText = "padding:16px;margin:16px auto;max-width:80rem;border-radius:12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;";
+        banner.innerHTML = \'<div style="flex:1;min-width:200px"><h4 style="font-weight:600;font-size:14px;color:#fbbf24;margin:0">Pending Upgrade in Progress</h4><p style="font-size:12px;color:#fde68a;margin:4px 0 0;opacity:0.8">This service has an unpaid upgrade invoice #' . $invoiceId . '. Pay the invoice to complete the upgrade, or cancel it below.</p></div><div style="display:flex;gap:8px;flex-shrink:0"><a href="' . $invoiceUrl . '" style="padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;background:#f59e0b;color:#000;text-decoration:none">Pay Invoice</a><form action="' . $cancelUrl . '" method="POST" onsubmit="return confirm(\\\'Cancel this pending upgrade and its invoice?\\\');" style="display:inline"><input type="hidden" name="_token" value="' . $csrfToken . '"><button type="submit" style="padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.3);cursor:pointer">Cancel Upgrade</button></form></div>\';
+
+        // Insert at top of main content
+        var firstChild = main.querySelector(".container, .mt-14, .mt-16, [class*=container]");
+        if (firstChild) {
+            firstChild.parentElement.insertBefore(banner, firstChild);
+        } else {
+            main.insertBefore(banner, main.firstChild);
+        }
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", injectCancelBanner);
+    } else {
+        setTimeout(injectCancelBanner, 100);
+    }
+})();
+</script>',
+            ];
         });
     }
 }
