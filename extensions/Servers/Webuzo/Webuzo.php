@@ -12,24 +12,22 @@ use Illuminate\Support\Str;
 /**
  * Webuzo server extension for Paymenter.
  *
- * Auth: apiuser + apikey as URL query params (same pattern as Virtualizor extension).
+ * Auth: apiuser + apikey as URL query params — same pattern as Virtualizor extension.
  * Ref: https://github.com/clientexec/webuzo-server/blob/master/WebuzoApi.php
  */
 class Webuzo extends Server
 {
     /**
      * Make an API request to the Webuzo Admin panel.
-     * Modelled exactly on Virtualizor extension pattern.
+     * Modelled on Virtualizor extension (identical auth pattern).
      */
     private function request(string $act, string $method = 'get', array $data = []): array
     {
-        $host    = rtrim($this->config('host'), '/');
-        $apiuser = $this->config('username');
-        $apikey  = $this->config('apikey');
+        $host = rtrim($this->config('host'), '/');
 
         $url = $host . '/index.php?api=json&act=' . $act
-            . '&apiuser=' . $apiuser
-            . '&apikey=' . $apikey
+            . '&apiuser=' . $this->config('username')
+            . '&apikey=' . $this->config('apikey')
             . '&skip_callback=1';
 
         if ($method === 'get') {
@@ -49,8 +47,7 @@ class Webuzo extends Server
         }
 
         if (!is_array($result)) {
-            $snippet = substr(strip_tags($body), 0, 300);
-            throw new Exception('Webuzo returned invalid response: ' . $snippet);
+            throw new Exception('Webuzo returned invalid response: ' . substr(strip_tags($body), 0, 300));
         }
 
         if (!empty($result['error'])) {
@@ -60,6 +57,10 @@ class Webuzo extends Server
 
         return $result;
     }
+
+    // -----------------------------------------------------------------------
+    // Server configuration (admin panel)
+    // -----------------------------------------------------------------------
 
     public function getConfig($values = []): array
     {
@@ -78,9 +79,8 @@ class Webuzo extends Server
                 'required' => true,
             ],
             [
-                // Do NOT use encrypted=>true — Extension::config() uses ->pluck() which
+                // Do NOT add encrypted=>true — Extension::config() uses ->pluck() which
                 // bypasses Eloquent model events, so encrypted values are never decrypted.
-                // All other extensions (Virtualizor, Plesk) also store API keys as plain text.
                 'name'        => 'apikey',
                 'type'        => 'text',
                 'label'       => 'API Key',
@@ -100,6 +100,10 @@ class Webuzo extends Server
             return $e->getMessage();
         }
     }
+
+    // -----------------------------------------------------------------------
+    // Product configuration (admin panel)
+    // -----------------------------------------------------------------------
 
     public function getProductConfig($values = []): array
     {
@@ -124,6 +128,10 @@ class Webuzo extends Server
         ];
     }
 
+    // -----------------------------------------------------------------------
+    // Checkout (customer-facing)
+    // -----------------------------------------------------------------------
+
     public function getCheckoutConfig(): array
     {
         return [
@@ -138,9 +146,17 @@ class Webuzo extends Server
         ];
     }
 
-    public function createServer(Service $service, $settings, $properties): bool
+    // -----------------------------------------------------------------------
+    // Service lifecycle
+    // -----------------------------------------------------------------------
+
+    /**
+     * Create a hosting account.
+     * Returns an array that Paymenter passes to the "new_server_created" email notification.
+     */
+    public function createServer(Service $service, $settings, $properties): array
     {
-        $username = strtolower('u' . Str::random(7));
+        $username = strtolower('w' . Str::random(7));
         $password = Str::random(16);
         $plan     = $settings['plan'] ?? null;
 
@@ -160,61 +176,102 @@ class Webuzo extends Server
 
         $this->request('add_user', 'post', $postData);
 
+        // Persist credentials as service properties (shown on the service page)
         $service->properties()->updateOrCreate(
             ['key' => 'webuzo_username'],
-            ['name' => 'Webuzo Username', 'value' => $username]
+            ['name' => 'Username', 'value' => $username]
         );
         $service->properties()->updateOrCreate(
             ['key' => 'webuzo_password'],
-            ['name' => 'Webuzo Password', 'value' => $password]
+            ['name' => 'Password', 'value' => $password]
         );
         $service->properties()->updateOrCreate(
             ['key' => 'webuzo_domain'],
             ['name' => 'Domain', 'value' => $properties['domain']]
         );
 
-        return true;
+        $host        = rtrim($this->config('host'), '/');
+        $panelUrl    = str_replace([':2005', ':2004'], [':2003', ':2002'], $host);
+
+        $service->properties()->updateOrCreate(
+            ['key' => 'webuzo_panel_url'],
+            ['name' => 'Control Panel URL', 'value' => $panelUrl]
+        );
+
+        // Return array is sent to the user's "server created" email notification
+        return [
+            'username'         => $username,
+            'password'         => $password,
+            'domain'           => $properties['domain'],
+            'control_panel'    => $panelUrl,
+        ];
     }
 
+    /**
+     * Suspend a hosting account (called on overdue invoices / manual suspend).
+     */
     public function suspendServer(Service $service, $settings, $properties): bool
     {
-        if (!isset($properties['webuzo_username'])) {
-            throw new Exception('Service has not been created');
+        if (empty($properties['webuzo_username'])) {
+            throw new Exception('Service has not been provisioned yet.');
         }
 
-        $this->request('users', 'post', ['suspend' => $properties['webuzo_username']]);
+        $this->request('users', 'post', [
+            'suspend' => $properties['webuzo_username'],
+        ]);
 
         return true;
     }
 
+    /**
+     * Unsuspend a hosting account (called when invoice is paid / manual unsuspend).
+     */
     public function unsuspendServer(Service $service, $settings, $properties): bool
     {
-        if (!isset($properties['webuzo_username'])) {
-            throw new Exception('Service has not been created');
+        if (empty($properties['webuzo_username'])) {
+            throw new Exception('Service has not been provisioned yet.');
         }
 
-        $this->request('users', 'post', ['unsuspend' => $properties['webuzo_username']]);
+        $this->request('users', 'post', [
+            'unsuspend' => $properties['webuzo_username'],
+        ]);
 
         return true;
     }
 
+    /**
+     * Terminate a hosting account (called on cancellation).
+     * Deletes the account and cleans up stored properties.
+     */
     public function terminateServer(Service $service, $settings, $properties): bool
     {
-        if (!isset($properties['webuzo_username'])) {
-            throw new Exception('Service has not been created');
+        if (empty($properties['webuzo_username'])) {
+            // Nothing to delete — account was never provisioned
+            return true;
         }
 
-        $this->request('users', 'post', ['delete_user' => $properties['webuzo_username']]);
+        $this->request('users', 'post', [
+            'delete_user' => $properties['webuzo_username'],
+        ]);
 
-        $service->properties()->whereIn('key', ['webuzo_username', 'webuzo_password', 'webuzo_domain'])->delete();
+        // Clean up all stored properties
+        $service->properties()->whereIn('key', [
+            'webuzo_username',
+            'webuzo_password',
+            'webuzo_domain',
+            'webuzo_panel_url',
+        ])->delete();
 
         return true;
     }
 
+    /**
+     * Upgrade/downgrade the account's hosting plan.
+     */
     public function upgradeServer(Service $service, $settings, $properties): bool
     {
-        if (!isset($properties['webuzo_username'])) {
-            throw new Exception('Service has not been created');
+        if (empty($properties['webuzo_username'])) {
+            throw new Exception('Service has not been provisioned yet.');
         }
 
         $this->request('add_user', 'post', [
@@ -227,33 +284,50 @@ class Webuzo extends Server
         return true;
     }
 
+    // -----------------------------------------------------------------------
+    // Customer-facing actions & SSO
+    // -----------------------------------------------------------------------
+
+    /**
+     * Generate a one-click SSO login URL for the Webuzo end-user panel.
+     * Called when customer clicks "Access Webuzo" button.
+     */
     public function getLoginUrl(Service $service, $settings, $properties): string
     {
-        if (!isset($properties['webuzo_username'])) {
-            throw new Exception('Service has not been created');
+        if (empty($properties['webuzo_username'])) {
+            throw new Exception('Service has not been provisioned yet.');
         }
 
-        $result = $this->request('sso', 'post', ['user' => $properties['webuzo_username']]);
+        try {
+            $result = $this->request('sso', 'post', [
+                'user' => $properties['webuzo_username'],
+            ]);
 
-        if (!empty($result['done']['url'])) {
-            return $result['done']['url'];
+            if (!empty($result['done']['url'])) {
+                return $result['done']['url'];
+            }
+        } catch (Exception $e) {
+            // SSO failed — fall back to direct panel URL
         }
 
-        // Fallback: enduser panel is on port 2003 (SSL) or 2002
+        // Fallback: direct login page on end-user port (2003 SSL / 2002 non-SSL)
         $host = rtrim($this->config('host'), '/');
 
         return str_replace([':2005', ':2004'], [':2003', ':2002'], $host);
     }
 
+    /**
+     * Buttons shown to the customer on their service page.
+     */
     public function getActions(Service $service, $settings, $properties): array
     {
-        if (!isset($properties['webuzo_username'])) {
+        if (empty($properties['webuzo_username'])) {
             return [];
         }
 
         return [
             [
-                'label'    => 'Access Webuzo',
+                'label'    => 'Access Control Panel',
                 'type'     => 'button',
                 'function' => 'getLoginUrl',
             ],
