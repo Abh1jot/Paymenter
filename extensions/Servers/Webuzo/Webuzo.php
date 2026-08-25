@@ -24,13 +24,16 @@ class Webuzo extends Server
     private function request(string $act, string $method = 'get', array $data = []): array
     {
         $host = rtrim($this->config('host'), '/');
-        $url = $host . '/index.php?api=json&act=' . $act;
 
-        $http = Http::withBasicAuth(
-            $this->config('username'),
-            $this->config('password')
-        )->withoutVerifying()
-         ->timeout(30);
+        // Webuzo requires credentials embedded in the URL for API auth
+        $username = urlencode($this->config('username'));
+        $password = urlencode($this->config('password'));
+
+        // Insert credentials into the URL: https://user:pass@host:port/...
+        $authHost = preg_replace('#^(https?://)#', '$1' . $username . ':' . $password . '@', $host);
+        $url = $authHost . '/index.php?api=json&act=' . $act;
+
+        $http = Http::withoutVerifying()->timeout(30);
 
         // Use form encoding for POST requests (Webuzo expects form data)
         if ($method === 'post') {
