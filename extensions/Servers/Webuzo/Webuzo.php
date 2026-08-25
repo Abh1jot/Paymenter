@@ -26,21 +26,40 @@ class Webuzo extends Server
         $host = rtrim($this->config('host'), '/');
         $url = $host . '/index.php?api=json&act=' . $act;
 
-        $response = Http::withBasicAuth(
+        $http = Http::withBasicAuth(
             $this->config('username'),
             $this->config('password')
-        )->withOptions([
-            'verify' => false,
-        ])->$method($url, $data);
+        )->withoutVerifying()
+         ->timeout(30);
+
+        // Use form encoding for POST requests (Webuzo expects form data)
+        if ($method === 'post') {
+            $http = $http->asForm();
+        }
+
+        $response = $http->$method($url, $data);
 
         if (!$response->successful()) {
             throw new Exception('Webuzo API request failed: HTTP ' . $response->status());
         }
 
-        $result = $response->json();
+        $body = $response->body();
 
+        // Try JSON first
+        $result = json_decode($body, true);
+
+        // If JSON failed, try unserializing (Webuzo sometimes returns serialized PHP)
         if (!is_array($result)) {
-            throw new Exception('Webuzo API returned an invalid response');
+            $result = @unserialize($body);
+        }
+
+        // If still not an array, the response is likely HTML (login page / error page)
+        if (!is_array($result)) {
+            // Check if it's an HTML page (likely auth failure or wrong URL)
+            if (str_contains($body, '<html') || str_contains($body, '<!DOCTYPE')) {
+                throw new Exception('Webuzo returned an HTML page instead of API data. Please verify the panel URL and credentials.');
+            }
+            throw new Exception('Webuzo API returned an invalid response: ' . substr($body, 0, 200));
         }
 
         // Check for errors in the response
