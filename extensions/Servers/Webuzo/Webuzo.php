@@ -105,27 +105,28 @@ class Webuzo extends Server
     {
         return [
             [
-                'name' => 'host',
-                'type' => 'text',
-                'label' => 'Webuzo Panel URL',
+                'name'        => 'host',
+                'type'        => 'text',
+                'label'       => 'Webuzo Panel URL',
                 'placeholder' => 'https://your-server-ip:2005',
-                'validation' => 'url:http,https',
-                'required' => true,
+                'validation'  => 'url:http,https',
+                'required'    => true,
             ],
             [
-                'name' => 'username',
-                'type' => 'text',
-                'label' => 'API Username',
+                'name'        => 'username',
+                'type'        => 'text',
+                'label'       => 'API Username',
                 'placeholder' => 'admin',
-                'required' => true,
+                'required'    => true,
             ],
             [
-                'name' => 'apikey',
-                'type' => 'password',
-                'label' => 'API Key',
+                // NOTE: do NOT set encrypted=>true — Extension::config() uses pluck()
+                // which bypasses Eloquent events so encrypted values won't be decrypted.
+                'name'        => 'apikey',
+                'type'        => 'text',
+                'label'       => 'API Key',
                 'placeholder' => 'Generate from Webuzo Admin → Settings → API Keys',
-                'required' => true,
-                'encrypted' => true,
+                'required'    => true,
             ],
         ];
     }
