@@ -23,14 +23,27 @@ class Webuzo extends Server
      */
     private function request(string $act, string $method = 'get', array $data = []): array
     {
-        $host = rtrim($this->config('host'), '/');
+        $host     = rtrim($this->config('host'), '/');
+        $username = $this->config('username');
+        // Support both 'apikey' and legacy 'password' field names
+        $apikey   = $this->config('apikey') ?? $this->config('password');
+
+        if (empty($host)) {
+            throw new Exception('Webuzo: Panel URL is not configured.');
+        }
+        if (empty($username)) {
+            throw new Exception('Webuzo: API Username is not configured.');
+        }
+        if (empty($apikey)) {
+            throw new Exception('Webuzo: API Key is not configured. Go to Webuzo Admin → Settings → API Keys to generate one.');
+        }
 
         // Webuzo API authenticates via apiuser + apikey as query parameters
         // Reference: https://github.com/clientexec/webuzo-server/blob/master/WebuzoApi.php
         $url = $host . '/index.php?act=' . $act
             . '&api=json'
-            . '&apiuser=' . urlencode($this->config('username'))
-            . '&apikey=' . urlencode($this->config('apikey'))
+            . '&apiuser=' . urlencode($username)
+            . '&apikey=' . urlencode($apikey)
             . '&skip_callback=1';
 
         // Use explicit curl options to bypass SSL verification (same as working raw cURL test)
@@ -52,7 +65,7 @@ class Webuzo extends Server
         $response = $http->$method($url, $data);
 
         if (!$response->successful()) {
-            throw new Exception('Webuzo API request failed: HTTP ' . $response->status());
+            throw new Exception('Webuzo API request failed: HTTP ' . $response->status() . ' for ' . $host);
         }
 
         $body = $response->body();
@@ -68,9 +81,9 @@ class Webuzo extends Server
         // If still not an array, the response is likely HTML (login page / error page)
         if (!is_array($result)) {
             if (str_contains($body, '<html') || str_contains($body, '<!DOCTYPE')) {
-                throw new Exception('Webuzo returned an HTML page. Please verify the panel URL, API username, and API key.');
+                throw new Exception('Webuzo returned HTML (likely auth failure). Response snippet: ' . substr(strip_tags($body), 0, 300));
             }
-            throw new Exception('Webuzo API returned an invalid response: ' . substr($body, 0, 200));
+            throw new Exception('Webuzo API invalid response: ' . substr($body, 0, 300));
         }
 
         // Check for errors in the response
