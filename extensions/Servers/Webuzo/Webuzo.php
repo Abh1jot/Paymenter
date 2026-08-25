@@ -25,15 +25,17 @@ class Webuzo extends Server
     {
         $host = rtrim($this->config('host'), '/');
 
-        // Webuzo requires credentials embedded in the URL for API auth
-        $username = urlencode($this->config('username'));
-        $password = urlencode($this->config('password'));
+        // Webuzo API authenticates via apiuser + apikey as query parameters
+        // Reference: https://github.com/clientexec/webuzo-server/blob/master/WebuzoApi.php
+        $url = $host . '/index.php?act=' . $act
+            . '&api=json'
+            . '&apiuser=' . urlencode($this->config('username'))
+            . '&apikey=' . urlencode($this->config('apikey'))
+            . '&skip_callback=1';
 
-        // Insert credentials into the URL: https://user:pass@host:port/...
-        $authHost = preg_replace('#^(https?://)#', '$1' . $username . ':' . $password . '@', $host);
-        $url = $authHost . '/index.php?api=json&act=' . $act;
-
-        $http = Http::withoutVerifying()->timeout(30);
+        $http = Http::withoutVerifying()
+            ->timeout(30)
+            ->withHeaders(['User-Agent' => 'Softaculous']);
 
         // Use form encoding for POST requests (Webuzo expects form data)
         if ($method === 'post') {
@@ -58,9 +60,8 @@ class Webuzo extends Server
 
         // If still not an array, the response is likely HTML (login page / error page)
         if (!is_array($result)) {
-            // Check if it's an HTML page (likely auth failure or wrong URL)
             if (str_contains($body, '<html') || str_contains($body, '<!DOCTYPE')) {
-                throw new Exception('Webuzo returned an HTML page instead of API data. Please verify the panel URL and credentials.');
+                throw new Exception('Webuzo returned an HTML page. Please verify the panel URL, API username, and API key.');
             }
             throw new Exception('Webuzo API returned an invalid response: ' . substr($body, 0, 200));
         }
@@ -94,14 +95,15 @@ class Webuzo extends Server
             [
                 'name' => 'username',
                 'type' => 'text',
-                'label' => 'Admin Username',
-                'placeholder' => 'root',
+                'label' => 'API Username',
+                'placeholder' => 'admin',
                 'required' => true,
             ],
             [
-                'name' => 'password',
+                'name' => 'apikey',
                 'type' => 'password',
-                'label' => 'Admin Password',
+                'label' => 'API Key',
+                'placeholder' => 'Generate from Webuzo Admin → Settings → API Keys',
                 'required' => true,
                 'encrypted' => true,
             ],
