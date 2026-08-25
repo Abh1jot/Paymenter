@@ -33,9 +33,16 @@ class Webuzo extends Server
             . '&apikey=' . urlencode($this->config('apikey'))
             . '&skip_callback=1';
 
-        $http = Http::withoutVerifying()
-            ->timeout(30)
-            ->withHeaders(['User-Agent' => 'Softaculous']);
+        // Use explicit curl options to bypass SSL verification (same as working raw cURL test)
+        $http = Http::withOptions([
+            'verify'  => false,
+            'timeout' => 30,
+            'curl'    => [
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_USERAGENT      => 'Softaculous',
+            ],
+        ]);
 
         // Use form encoding for POST requests (Webuzo expects form data)
         if ($method === 'post') {
