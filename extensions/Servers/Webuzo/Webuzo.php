@@ -326,6 +326,28 @@ class Webuzo extends Server
         }
 
         return [
+            // Credential fields — shown as label: value on the service page
+            [
+                'type'  => 'text',
+                'label' => 'Domain',
+                'text'  => $properties['webuzo_domain'] ?? '',
+            ],
+            [
+                'type'  => 'text',
+                'label' => 'Username',
+                'text'  => $properties['webuzo_username'] ?? '',
+            ],
+            [
+                'type'  => 'text',
+                'label' => 'Password',
+                'text'  => $properties['webuzo_password'] ?? '',
+            ],
+            [
+                'type'  => 'text',
+                'label' => 'Control Panel',
+                'text'  => $properties['webuzo_panel_url'] ?? '',
+            ],
+            // SSO login button
             [
                 'label'    => 'Access Control Panel',
                 'type'     => 'button',
