@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 namespace Paymenter\Extensions\Others\CustomFees;
 
@@ -193,11 +193,16 @@ class CustomFees extends Extension
                         if ($feeAmount <= 0) continue;
 
                         $invoice->items()->create([
-                            'reference_id' => $service->id,
-                            'reference_type' => Service::class,
-                            'price' => $feeAmount,
-                            'quantity' => $invoiceItem->quantity,
-                            'description' => $fee->name . ' (' . rtrim(rtrim(number_format($fee->rate, 2), '0'), '.') . '%)',
+                            // IMPORTANT: Use Fee::class (NOT Service::class) as reference_type.
+                            // ProcessPaidInvoiceService iterates all items where reference_type = Service::class
+                            // and calls RenewServiceService for each one. Previously using Service::class here
+                            // caused RenewServiceService to fire once per fee item PLUS once for the plan item,
+                            // pushing expires_at forward by an extra billing period per fee. Bug: our extension.
+                            'reference_id'   => $fee->id,
+                            'reference_type' => Fee::class,
+                            'price'          => $feeAmount,
+                            'quantity'       => $invoiceItem->quantity,
+                            'description'    => $fee->name . ' (' . rtrim(rtrim(number_format($fee->rate, 2), '0'), '.') . '%)',
                         ]);
                     }
                 } finally {

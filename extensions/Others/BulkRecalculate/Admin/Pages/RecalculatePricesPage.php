@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 namespace Paymenter\Extensions\Others\BulkRecalculate\Admin\Pages;
 
@@ -35,6 +35,22 @@ class RecalculatePricesPage extends Page
         foreach ($services as $service) {
             $oldPrice = (float) $service->price;
             $newPrice = (float) $service->calculatePrice();
+
+            // Include custom fees in the recalculated price so the stored service
+            // price matches what will actually appear on the next renewal invoice.
+            // Without this, BulkRecalculate would strip fees from service->price
+            // because calculatePrice() has no knowledge of the CustomFees extension.
+            try {
+                if (class_exists(\Paymenter\Extensions\Others\CustomFees\Models\Fee::class)) {
+                    $fees = \Paymenter\Extensions\Others\CustomFees\Models\Fee::forProduct($service->product);
+                    foreach ($fees as $fee) {
+                        $newPrice += (float) $fee->calculateFee($newPrice);
+                    }
+                    $newPrice = number_format($newPrice, 2, '.', '');
+                }
+            } catch (\Exception $e) {
+                // CustomFees not available or failed, continue with base price
+            }
 
             if (number_format($oldPrice, 2, '.', '') !== number_format($newPrice, 2, '.', '')) {
                 $service->update(['price' => $newPrice]);
