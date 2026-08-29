@@ -8,17 +8,33 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\View\Compilers\BladeCompiler;
 use Paymenter\Extensions\Others\MailsManager\Models\BulkCampaign;
 
 class BulkMail extends Mailable
 {
     use Queueable, SerializesModels;
 
+    /**
+     * Public $data property — Mailable exposes public properties to the view,
+     * so base.blade.php can call BladeCompiler::render($body, $data).
+     * This must be named exactly 'data' to match what components.mail.base expects.
+     */
+    public array $data = [];
+
     public function __construct(
         public readonly BulkCampaign $campaign,
         public readonly User $recipient,
-    ) {}
+    ) {
+        // Personalise the body for this recipient
+        $body = $this->personalise($campaign->body, $recipient);
+
+        // $data mirrors what App\Mail\Mail exposes — the full variable bag
+        $this->data = [
+            'body'    => $body,
+            'subject' => $campaign->subject,
+            'user'    => $recipient,
+        ];
+    }
 
     public function envelope(): Envelope
     {
@@ -27,44 +43,44 @@ class BulkMail extends Mailable
         );
     }
 
+    /**
+     * Use Paymenter's own base mail template.
+     * components.mail.base does:
+     *   {!! BladeCompiler::render($body, $data) !!}
+     *
+     * Laravel exposes public Mailable properties as view variables,
+     * so $body comes from $data['body'] via 'with', and $data comes
+     * from $this->data (the public property).
+     */
     public function content(): Content
     {
-        // Personalise the body for this specific recipient
-        $body = $this->personalise($this->campaign->body, $this->recipient);
-
-        // Use Paymenter's base mail template — exactly like App\Mail\Mail does
         return new Content(
             html: 'components.mail.base',
-            with: [
-                'body'    => $body,
-                'subject' => $this->campaign->subject,
-                'user'    => $this->recipient,
-            ],
+            with: $this->data,
         );
     }
 
     /**
      * Replace {{ $user->xxx }} placeholders with actual recipient values.
-     * Uses str_replace so there is no Blade compilation — safe for queue workers.
      */
     private function personalise(string $body, User $user): string
     {
         $fullName = trim($user->first_name . ' ' . $user->last_name);
 
-        $search = [
-            '{{ $user->first_name }}', '{{$user->first_name}}',
-            '{{ $user->last_name }}',  '{{$user->last_name}}',
-            '{{ $user->email }}',      '{{$user->email}}',
-            '{{ $user->name }}',       '{{$user->name}}',
-        ];
-
-        $replace = [
-            $user->first_name, $user->first_name,
-            $user->last_name,  $user->last_name,
-            $user->email,      $user->email,
-            $fullName,         $fullName,
-        ];
-
-        return str_replace($search, $replace, $body);
+        return str_replace(
+            [
+                '{{ $user->first_name }}', '{{$user->first_name}}',
+                '{{ $user->last_name }}',  '{{$user->last_name}}',
+                '{{ $user->email }}',      '{{$user->email}}',
+                '{{ $user->name }}',       '{{$user->name}}',
+            ],
+            [
+                $user->first_name, $user->first_name,
+                $user->last_name,  $user->last_name,
+                $user->email,      $user->email,
+                $fullName,         $fullName,
+            ],
+            $body
+        );
     }
 }
