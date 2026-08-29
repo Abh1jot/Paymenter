@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 namespace Paymenter\Extensions\Others\CustomFees;
 
