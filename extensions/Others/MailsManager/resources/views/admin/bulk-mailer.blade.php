@@ -80,7 +80,8 @@
                             Email Preview
                         </p>
                         <iframe
-                            srcdoc="{{ $this->previewHtml }}"
+                            x-data="{ html: {{ Js::from($this->previewHtml) }} }"
+                            x-bind:srcdoc="html"
                             class="w-full rounded-xl border border-gray-200 dark:border-white/10 bg-white"
                             style="min-height: 500px;"
                             sandbox="allow-same-origin"

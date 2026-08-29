@@ -83,13 +83,13 @@
                                 <span wire:loading wire:target="saveTemplate">Saving…</span>
                             </x-filament::button>
 
-                            <x-filament::icon-button
+                            <button
                                 wire:click="closeEditor"
-                                icon="ri-close-line"
-                                color="gray"
-                                size="sm"
-                                tooltip="Close"
-                            />
+                                class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+                                title="Close"
+                            >
+                                <x-ri-close-line class="w-5 h-5" />
+                            </button>
                         </div>
                     </div>
 
@@ -136,7 +136,8 @@
                                 </x-slot>
                                 <x-slot name="description">Rendered with sample data</x-slot>
                                 <iframe
-                                    srcdoc="{{ $this->previewHtml }}"
+                                    x-data="{ html: {{ Js::from($this->previewHtml) }} }"
+                                    x-bind:srcdoc="html"
                                     class="w-full rounded-lg border border-gray-200 dark:border-white/10 bg-white"
                                     style="min-height: 540px;"
                                     sandbox="allow-same-origin"
