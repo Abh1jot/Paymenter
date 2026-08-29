@@ -5,15 +5,16 @@
         <div class="w-64 flex-shrink-0">
             <x-filament::section>
                 <x-slot name="heading">Email Templates</x-slot>
-                <x-slot name="description">{{ $this->templates->count() }} templates available</x-slot>
+                <x-slot name="description">{{ $this->templates->count() }} templates</x-slot>
 
                 <div class="-mx-4 -mb-4 divide-y divide-gray-100 dark:divide-white/10">
                     @foreach ($this->templates as $template)
                         <button
                             wire:click="editTemplate({{ $template->id }})"
                             @class([
-                                'w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-sm',
+                                'w-full text-left px-4 py-3 transition-colors',
                                 'bg-primary-50 dark:bg-primary-900/20 border-l-2 border-primary-500' => $editingId === $template->id,
+                                'hover:bg-gray-50 dark:hover:bg-white/5' => $editingId !== $template->id,
                             ])
                         >
                             <div class="flex items-center gap-2">
@@ -31,22 +32,23 @@
             </x-filament::section>
         </div>
 
-        {{-- ── Editor panel ── --}}
+        {{-- ── Editor ── --}}
         <div class="flex-1 min-w-0">
             @if (!$editingId)
                 <x-filament::section>
                     <div class="py-8 text-center">
                         <x-ri-mail-settings-line class="w-10 h-10 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
                         <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Select a template</p>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Click a template from the list to start editing.</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Click any template on the left to start editing.</p>
                     </div>
                 </x-filament::section>
             @else
                 <div class="space-y-4">
                     {{-- Action bar --}}
-                    <div class="flex items-center justify-between">
+                    <div class="flex items-center justify-between gap-4 flex-wrap">
                         <div>
                             <p class="text-sm font-mono font-semibold text-gray-800 dark:text-gray-100">{{ $this->editingTemplate?->key }}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Editing template</p>
                         </div>
                         <div class="flex items-center gap-2">
                             <x-filament::button
@@ -94,37 +96,17 @@
                     {{-- Editor + optional preview --}}
                     <div @class(['grid grid-cols-2 gap-4' => $showPreview])>
 
-                        {{-- Form fields --}}
-                        <div class="space-y-4">
+                        {{-- Filament form (renders TextInput + Textarea natively) --}}
+                        <div>
                             <x-filament::section>
-                                <x-slot name="heading">Subject Line</x-slot>
-                                <x-filament::input.wrapper>
-                                    <x-filament::input
-                                        type="text"
-                                        wire:model.live="editSubject"
-                                        placeholder="Email subject…"
-                                    />
-                                </x-filament::input.wrapper>
-                            </x-filament::section>
-
-                            <x-filament::section>
-                                <x-slot name="heading">Email Body</x-slot>
-                                <x-slot name="description">Supports Markdown and HTML</x-slot>
-                                <x-filament::input.wrapper>
-                                    <x-filament::input.textarea
-                                        wire:model.live.debounce.300ms="editBody"
-                                        rows="20"
-                                        placeholder="Write your email body here…"
-                                        class="font-mono text-xs"
-                                    />
-                                </x-filament::input.wrapper>
+                                {{ $this->form }}
                             </x-filament::section>
 
                             {{-- Variable hints --}}
                             @if ($this->availableVariables)
-                                <x-filament::section>
+                                <x-filament::section class="mt-4">
                                     <x-slot name="heading">
-                                        <span class="flex items-center gap-1.5">
+                                        <span class="flex items-center gap-1.5 text-sm">
                                             <x-ri-code-line class="w-4 h-4" />
                                             Available Variables
                                         </span>
@@ -161,11 +143,13 @@
                                 ></iframe>
                             </x-filament::section>
                         @endif
-
                     </div>
                 </div>
             @endif
         </div>
 
     </div>
+
+    {{-- Required by InteractsWithForms --}}
+    <x-filament-actions::modals />
 </x-filament-panels::page>

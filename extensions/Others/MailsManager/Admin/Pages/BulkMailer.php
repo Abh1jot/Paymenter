@@ -4,14 +4,21 @@ namespace Paymenter\Extensions\Others\MailsManager\Admin\Pages;
 
 use App\Models\Service;
 use App\Models\User;
+use Filament\Forms\Components\Radio;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
+use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Illuminate\Support\Str;
 use Paymenter\Extensions\Others\MailsManager\Jobs\BulkMailJob;
 use Paymenter\Extensions\Others\MailsManager\Models\BulkCampaign;
 
-class BulkMailer extends Page
+class BulkMailer extends Page implements HasForms
 {
+    use InteractsWithForms;
+
     protected string $view = 'mailsmanager::admin.bulk-mailer';
 
     protected static string|\BackedEnum|null $navigationIcon = 'ri-mail-send-line';
@@ -24,96 +31,134 @@ class BulkMailer extends Page
 
     protected static ?int $navigationSort = 2;
 
-    // ── Form state ────────────────────────────────────────────────
+    // ── State ─────────────────────────────────────────────────────
 
-    public string $campaignName    = '';
-    public string $subject         = '';
-    public string $body            = '';
-    public string $recipientType   = 'all';  // 'all' | 'active'
-    public bool   $confirmSend     = false;
-    public bool   $showPreview     = false;
+    public ?array $data        = [];
+    public bool   $confirmSend = false;
+    public bool   $showPreview = false;
+
+    public function mount(): void
+    {
+        $this->form->fill([
+            'recipientType' => 'all',
+        ]);
+    }
+
+    // ── Form ──────────────────────────────────────────────────────
+
+    public function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                TextInput::make('campaignName')
+                    ->label('Campaign Name')
+                    ->placeholder('e.g. August Newsletter')
+                    ->required()
+                    ->columnSpanFull(),
+
+                TextInput::make('subject')
+                    ->label('Subject')
+                    ->placeholder('Email subject line…')
+                    ->required()
+                    ->live()
+                    ->columnSpanFull(),
+
+                Textarea::make('body')
+                    ->label('Email Body (HTML supported)')
+                    ->placeholder("Write your email here…\n\nPersonalise with: {{ \$user->first_name }}, {{ \$user->last_name }}, {{ \$user->email }}")
+                    ->rows(12)
+                    ->required()
+                    ->live(debounce: 500)
+                    ->extraInputAttributes(['class' => 'font-mono text-xs'])
+                    ->columnSpanFull(),
+
+                Radio::make('recipientType')
+                    ->label('Recipients')
+                    ->options([
+                        'all'    => 'All Users — every registered user',
+                        'active' => 'Active Customers — users with active services',
+                    ])
+                    ->default('all')
+                    ->required()
+                    ->live()
+                    ->columnSpanFull(),
+            ])
+            ->statePath('data');
+    }
 
     // ── Computed ──────────────────────────────────────────────────
 
-    /**
-     * Count of users that will receive the email based on current recipientType.
-     */
     public function getRecipientCountProperty(): int
     {
-        if ($this->recipientType === 'active') {
+        $type = $this->data['recipientType'] ?? 'all';
+
+        if ($type === 'active') {
             return User::whereIn(
                 'id',
                 Service::where('status', 'active')->distinct()->pluck('user_id')
             )->count();
         }
+
         return User::count();
     }
 
-    /**
-     * All past campaigns, newest first.
-     */
     public function getCampaignsProperty(): \Illuminate\Database\Eloquent\Collection
     {
         return BulkCampaign::latest()->get();
     }
 
-    /**
-     * Preview HTML for the current body.
-     */
     public function getPreviewHtmlProperty(): string
     {
-        if (!$this->body) {
-            return '<p style="font-family:sans-serif;color:#888;padding:2rem;text-align:center;">Write your email body above to preview it here.</p>';
+        $body    = $this->data['body'] ?? '';
+        $subject = $this->data['subject'] ?? '';
+        $appName = config('app.name', 'Paymenter');
+
+        if (!$body) {
+            return '<p style="font-family:sans-serif;color:#888;padding:2rem;text-align:center;">Write your email body above to see a preview.</p>';
         }
 
-        $appName = config('app.name', 'Paymenter');
-        $body = $this->body;
-
-        // Wrap in the same style as SystemMail
-        $bodyHtml = "<p>Hi,</p>\n{$body}\n<small>This is an automated message sent from {$appName}</small>";
-
+        $escaped = nl2br(htmlspecialchars($body));
         return <<<HTML
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
-  body { font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; color: #333; }
-  small { color: #888; display: block; margin-top: 2rem; }
+  body { font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; color: #333; line-height: 1.6; }
+  .header { background:#4f46e5; color:#fff; padding:1.5rem; border-radius:8px 8px 0 0; }
+  .body { border:1px solid #e5e7eb; border-top:0; padding:1.5rem; border-radius:0 0 8px 8px; }
+  small { color: #9ca3af; display:block; margin-top:2rem; font-size:12px; }
 </style>
 </head>
-<body>{$bodyHtml}</body>
+<body>
+  <div class="header"><strong>{$appName}</strong></div>
+  <div class="body">
+    <p>Hi,</p>
+    {$body}
+    <small>This is a preview of your campaign email from {$appName}.</small>
+  </div>
+</body>
 </html>
 HTML;
     }
 
     // ── Actions ───────────────────────────────────────────────────
 
-    /**
-     * Validate and show confirmation before sending.
-     */
     public function prepareSend(): void
     {
-        $this->validate([
-            'campaignName'  => 'required|string|max:255',
-            'subject'       => 'required|string|max:255',
-            'body'          => 'required|string',
-            'recipientType' => 'required|in:all,active',
-        ]);
-
+        $this->form->validate();
         $this->confirmSend = true;
     }
 
-    /**
-     * Create campaign record and dispatch the bulk mail job.
-     */
     public function sendCampaign(): void
     {
+        $state = $this->form->getState();
+
         $campaign = BulkCampaign::create([
-            'name'           => $this->campaignName,
-            'subject'        => $this->subject,
-            'body'           => $this->body,
-            'recipient_type' => $this->recipientType,
+            'name'           => $state['campaignName'],
+            'subject'        => $state['subject'],
+            'body'           => $state['body'],
+            'recipient_type' => $state['recipientType'],
             'status'         => 'pending',
             'sent_count'     => 0,
             'total_count'    => $this->recipientCount,
@@ -121,30 +166,20 @@ HTML;
 
         BulkMailJob::dispatch($campaign);
 
-        // Reset form
-        $this->campaignName  = '';
-        $this->subject       = '';
-        $this->body          = '';
-        $this->recipientType = 'all';
-        $this->confirmSend   = false;
+        $this->form->fill(['recipientType' => 'all']);
+        $this->confirmSend = false;
 
         Notification::make()
-            ->title('Campaign "' . $campaign->name . '" queued — ' . $campaign->total_count . ' recipients.')
+            ->title('Campaign "' . $campaign->name . '" queued — ' . number_format($campaign->total_count) . ' recipients.')
             ->success()
             ->send();
     }
 
-    /**
-     * Cancel the confirmation dialog.
-     */
     public function cancelSend(): void
     {
         $this->confirmSend = false;
     }
 
-    /**
-     * Toggle the preview panel.
-     */
     public function togglePreview(): void
     {
         $this->showPreview = !$this->showPreview;
