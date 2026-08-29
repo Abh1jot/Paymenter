@@ -153,7 +153,7 @@
                                                         <span class="text-xs font-semibold text-blue-600 dark:text-blue-400">{{ $var }}</span>
                                                         <span class="text-xs text-blue-500 dark:text-blue-500 ml-2">→</span>
                                                         @foreach ($examples as $ex)
-                                                            <code class="ml-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1 py-0.5 rounded">{{ '{{ ' . $ex . ' }}' }}</code>
+                                                            <code class="ml-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1 py-0.5 rounded">@php echo htmlspecialchars('{{ ' . $ex . ' }}'); @endphp</code>
                                                         @endforeach
                                                     </div>
                                                 @endforeach
