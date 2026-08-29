@@ -45,7 +45,7 @@ class TemplateEditor extends Page
     /** All notification templates (used to build the list) */
     public function getTemplatesProperty(): \Illuminate\Database\Eloquent\Collection
     {
-        return NotificationTemplate::orderBy('name')->get();
+        return NotificationTemplate::orderBy('key')->get();
     }
 
     /** Currently selected template model */
