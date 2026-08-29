@@ -9,9 +9,9 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Auth;
 
 class TemplateEditor extends Page implements HasForms
@@ -38,10 +38,10 @@ class TemplateEditor extends Page implements HasForms
 
     // ── Form ──────────────────────────────────────────────────────
 
-    public function form(Form $form): Form
+    public function form(Schema $form): Schema
     {
         return $form
-            ->schema([
+            ->components([
                 TextInput::make('subject')
                     ->label('Subject Line')
                     ->required()
