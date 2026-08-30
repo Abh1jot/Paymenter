@@ -65,7 +65,7 @@ class ServiceResource extends Resource
                         titleAttribute: 'name',
                         modifyQueryUsing: fn (Builder $query) => $query->with('category')
                     )
-                    ->getOptionLabelFromRecordUsing(fn (Product $product) => "{$product->name} - {$product->category->name} (#{$product->id})")
+                    ->getOptionLabelFromRecordUsing(fn (Product $product) => "{$product->name} - " . ($product->category?->name ?? 'No Category') . " (#{$product->id})")
                     ->searchable()
                     ->live()
                     ->preload()
