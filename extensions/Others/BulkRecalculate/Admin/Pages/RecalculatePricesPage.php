@@ -36,25 +36,17 @@ class RecalculatePricesPage extends Page
             $oldPrice = (float) $service->price;
             $newPrice = (float) $service->calculatePrice();
 
-            // Include custom fees in the recalculated price so the stored service
-            // price matches what will actually appear on the next renewal invoice.
-            // Without this, BulkRecalculate would strip fees from service->price
-            // because calculatePrice() has no knowledge of the CustomFees extension.
-            try {
-                if (class_exists(\Paymenter\Extensions\Others\CustomFees\Models\Fee::class)) {
-                    $fees = \Paymenter\Extensions\Others\CustomFees\Models\Fee::forProduct($service->product);
-                    foreach ($fees as $fee) {
-                        $newPrice += (float) $fee->calculateFee($newPrice);
-                    }
-                    $newPrice = number_format($newPrice, 2, '.', '');
-                }
-            } catch (\Exception $e) {
-                // CustomFees not available or failed, continue with base price
-            }
+            $formattedOldPrice = number_format($oldPrice, 2, '.', '');
+            $formattedNewPrice = number_format($newPrice, 2, '.', '');
 
-            if (number_format($oldPrice, 2, '.', '') !== number_format($newPrice, 2, '.', '')) {
-                $service->update(['price' => $newPrice]);
-                $updated[] = ($service->product->name ?? 'Service') . ' #' . $service->id . ': ' . number_format($oldPrice, 2) . ' ? ' . number_format($newPrice, 2) . ' ' . ($service->currency ?? '');
+            // IMPORTANT: $service->price in Paymenter must represent the pure recurring base price
+            // (Plan + Config Options - Coupon). The CustomFees extension dynamically attaches fee line
+            // items when invoices are generated via the InvoiceItemCreated event listener.
+            // Do NOT add fees to $service->price here, as that causes fees to be charged twice on renewals.
+            if ($formattedOldPrice !== $formattedNewPrice) {
+                $service->update(['price' => $formattedNewPrice]);
+                $currencyCode = $service->currency_code ?? ($service->currency->code ?? '');
+                $updated[] = ($service->product->name ?? 'Service') . ' #' . $service->id . ': ' . $formattedOldPrice . ' -> ' . $formattedNewPrice . ' ' . $currencyCode;
             } else {
                 $unchanged++;
             }
@@ -87,7 +79,7 @@ class RecalculatePricesPage extends Page
                 ->color('warning')
                 ->requiresConfirmation()
                 ->modalHeading('Recalculate All Active Service Prices')
-                ->modalDescription('This will recalculate recurring prices for ALL active and suspended services using current product prices, config options, and fees. Services with price differences will be updated automatically.')
+                ->modalDescription('This will recalculate recurring base prices for ALL active and suspended services using current product prices, plan prices, and config options. Services with price differences (such as previously baked-in fees) will be reset to the correct base price.')
                 ->action(fn () => $this->recalculateAll()),
         ];
     }

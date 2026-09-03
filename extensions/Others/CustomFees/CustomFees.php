@@ -21,7 +21,7 @@ use Paymenter\Extensions\Others\CustomFees\Models\Fee;
 #[ExtensionMeta(
     name: 'Custom Fees',
     description: 'Add custom percentage fees to specific products or entire categories, automatically displaying fee breakdowns on checkout and invoices across all themes.',
-    version: '1.1.0',
+    version: '1.1.1',
     author: 'Azion Cloud',
     icon: 'ri-percent-line'
 )]
@@ -192,12 +192,21 @@ class CustomFees extends Extension
                         $feeAmount = $fee->calculateFee($basePrice);
                         if ($feeAmount <= 0) continue;
 
+                        // Prevent duplicate fee items on the same invoice
+                        $alreadyExists = $invoice->items()
+                            ->where('reference_type', Fee::class)
+                            ->where('reference_id', $fee->id)
+                            ->exists();
+
+                        if ($alreadyExists) {
+                            continue;
+                        }
+
                         $invoice->items()->create([
                             // IMPORTANT: Use Fee::class (NOT Service::class) as reference_type.
                             // ProcessPaidInvoiceService iterates all items where reference_type = Service::class
-                            // and calls RenewServiceService for each one. Previously using Service::class here
-                            // caused RenewServiceService to fire once per fee item PLUS once for the plan item,
-                            // pushing expires_at forward by an extra billing period per fee. Bug: our extension.
+                            // and calls RenewServiceService for each one. Using Service::class here
+                            // caused RenewServiceService to fire once per fee item PLUS once for the plan item.
                             'reference_id'   => $fee->id,
                             'reference_type' => Fee::class,
                             'price'          => $feeAmount,
