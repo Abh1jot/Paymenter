@@ -6,7 +6,6 @@ use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -122,7 +121,7 @@ class DiscordOverview extends Page implements HasTable
                     ->label('Details')
                     ->limit(40),
             ])
-            ->actions([
+            ->recordActions([
                 \Filament\Actions\Action::make('retry')
                     ->label('Retry')
                     ->icon('ri-refresh-line')

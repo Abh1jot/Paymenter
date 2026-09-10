@@ -67,7 +67,7 @@ class LinkedAccountResource extends Resource
                     ->date('M d, Y')
                     ->sortable(),
             ])
-            ->actions([
+            ->recordActions([
                 Action::make('sync_roles')
                     ->label('Sync Roles')
                     ->icon('ri-refresh-line')
@@ -100,7 +100,7 @@ class LinkedAccountResource extends Resource
                 DeleteAction::make()
                     ->label('Unlink'),
             ])
-            ->bulkActions([
+            ->toolbarActions([
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
                 ]),

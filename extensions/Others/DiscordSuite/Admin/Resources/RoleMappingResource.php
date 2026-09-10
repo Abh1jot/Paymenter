@@ -8,12 +8,12 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Forms\Get;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -86,18 +86,19 @@ class RoleMappingResource extends Resource
                         ->required(fn (Get $get) => $get('rule_type') === 'customer_tier' && $get('tier_type') === 'premium'),
 
                     Select::make('target_id')
-                        ->label('Product')
-                        ->options(fn () => Product::all()->pluck('name', 'id')->toArray())
+                        ->label(fn (Get $get) => $get('rule_type') === 'product' ? 'Product' : 'Category')
+                        ->options(function (Get $get) {
+                            if ($get('rule_type') === 'product') {
+                                return Product::all()->pluck('name', 'id')->toArray();
+                            }
+                            if ($get('rule_type') === 'category') {
+                                return Category::all()->pluck('name', 'id')->toArray();
+                            }
+                            return [];
+                        })
                         ->searchable()
-                        ->visible(fn (Get $get) => $get('rule_type') === 'product')
-                        ->required(fn (Get $get) => $get('rule_type') === 'product'),
-
-                    Select::make('target_id')
-                        ->label('Category')
-                        ->options(fn () => Category::all()->pluck('name', 'id')->toArray())
-                        ->searchable()
-                        ->visible(fn (Get $get) => $get('rule_type') === 'category')
-                        ->required(fn (Get $get) => $get('rule_type') === 'category'),
+                        ->visible(fn (Get $get) => in_array($get('rule_type'), ['product', 'category']))
+                        ->required(fn (Get $get) => in_array($get('rule_type'), ['product', 'category'])),
 
                     TextInput::make('discord_role_name')
                         ->label('Discord Role Label')
@@ -160,11 +161,11 @@ class RoleMappingResource extends Resource
                     ->label('Active')
                     ->boolean(),
             ])
-            ->actions([
+            ->recordActions([
                 EditAction::make(),
                 DeleteAction::make(),
             ])
-            ->bulkActions([
+            ->toolbarActions([
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
                 ]),
