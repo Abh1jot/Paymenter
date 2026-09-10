@@ -7,6 +7,7 @@ use App\Models\Setting;
 use Exception;
 use Filament\Actions\Action;
 use Filament\Forms\Components\ColorPicker;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -19,8 +20,8 @@ use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
-use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
+use Illuminate\Support\HtmlString;
 use Paymenter\Extensions\Others\DiscordSuite\Admin\Clusters\DiscordSuiteCluster;
 use Paymenter\Extensions\Others\DiscordSuite\Services\DiscordApiService;
 use Paymenter\Extensions\Others\DiscordSuite\Services\DiscordInteractionService;
@@ -243,7 +244,59 @@ class Settings extends Page implements HasForms
                             Tab::make('Setup Guide')
                                 ->icon('ri-book-open-line')
                                 ->schema([
-                                    View::make('discord_suite::admin.partials.setup-guide'),
+                                    Section::make('1. Create Discord Application')
+                                        ->description('Register your bot application in the Discord Developer Portal')
+                                        ->schema([
+                                            Placeholder::make('step1')
+                                                ->hiddenLabel()
+                                                ->content(new HtmlString('<div style="font-size: 0.875rem; color: #d1d5db; line-height: 1.6;">Head to the <a href="https://discord.com/developers/applications" target="_blank" style="color: #60a5fa; text-decoration: underline; font-weight: 600;">Discord Developer Portal</a>, click <strong>"New Application"</strong> in the top right, and name it your company brand (e.g. <em>Azion Cloud Bot</em>).</div>')),
+                                        ]),
+
+                                    Section::make('2. Enable Privileged Gateway Intents & Copy Bot Token')
+                                        ->description('Required for checking server membership, status, and managing roles')
+                                        ->schema([
+                                            Placeholder::make('step2')
+                                                ->hiddenLabel()
+                                                ->content(new HtmlString('<div style="font-size: 0.875rem; color: #d1d5db; line-height: 1.6;"><p>In your Discord application, navigate to the <strong>Bot</strong> tab on the left menu:</p><ul style="list-style: disc; padding-left: 1.5rem; margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem; color: #9ca3af;"><li>Click <strong>"Reset Token"</strong> to generate your secret <strong>Bot Token</strong>, then paste it into the <em>Bot Credentials</em> tab above.</li><li>Scroll down to <strong>Privileged Gateway Intents</strong> and turn ON <strong style="color: #fbbf24;">SERVER MEMBERS INTENT</strong>.</li></ul></div>')),
+                                        ]),
+
+                                    Section::make('3. Configure OAuth2 Redirect URLs')
+                                        ->description('Copy and paste these exact Redirect URLs into OAuth2 -> General in Discord Developer Portal')
+                                        ->schema([
+                                            Grid::make(1)->schema([
+                                                TextInput::make('oauth_redirect_url')
+                                                    ->label('Main Account Linking Redirect URL')
+                                                    ->default(url('/discord-suite/oauth/callback'))
+                                                    ->disabled()
+                                                    ->dehydrated(false)
+                                                    ->helperText('Used for customer account linking and server auto-join'),
+                                                TextInput::make('linked_roles_redirect_url')
+                                                    ->label('Discord Linked Roles Redirect URL')
+                                                    ->default(url('/discord-suite/linked-roles/callback'))
+                                                    ->disabled()
+                                                    ->dehydrated(false)
+                                                    ->helperText('Used for official Discord Connected Roles verification'),
+                                            ]),
+                                        ]),
+
+                                    Section::make('4. Configure Interactions Endpoint URL (Slash Commands)')
+                                        ->description('Enable real-time HTTP-based slash command responses')
+                                        ->schema([
+                                            TextInput::make('interactions_url')
+                                                ->label('Interactions Endpoint URL')
+                                                ->default(url('/api/discord-suite/interactions'))
+                                                ->disabled()
+                                                ->dehydrated(false)
+                                                ->helperText('In General Information, paste into Interactions Endpoint URL. Important: Save your Public Key in Bot Credentials first so Discord\'s Ed25519 validation ping succeeds!'),
+                                        ]),
+
+                                    Section::make('5. Invite Bot & Configure Role Hierarchy')
+                                        ->description('Permissions and role hierarchy configuration')
+                                        ->schema([
+                                            Placeholder::make('step5')
+                                                ->hiddenLabel()
+                                                ->content(new HtmlString('<div style="font-size: 0.875rem; color: #d1d5db; line-height: 1.6;"><p>Under <strong>OAuth2 -> URL Generator</strong>, select scopes <code>bot</code> and <code>applications.commands</code> with permissions:</p><div style="display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0;"><span style="background: rgba(255,255,255,0.08); padding: 4px 8px; border-radius: 4px; font-family: monospace; font-size: 12px; color: #e5e7eb;">Manage Roles</span><span style="background: rgba(255,255,255,0.08); padding: 4px 8px; border-radius: 4px; font-family: monospace; font-size: 12px; color: #e5e7eb;">Create Instant Invite</span><span style="background: rgba(255,255,255,0.08); padding: 4px 8px; border-radius: 4px; font-family: monospace; font-size: 12px; color: #e5e7eb;">Send Messages</span><span style="background: rgba(255,255,255,0.08); padding: 4px 8px; border-radius: 4px; font-family: monospace; font-size: 12px; color: #e5e7eb;">Embed Links</span><span style="background: rgba(255,255,255,0.08); padding: 4px 8px; border-radius: 4px; font-family: monospace; font-size: 12px; color: #e5e7eb;">Use Slash Commands</span></div><div style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 12px; color: #fbbf24; font-size: 13px; line-height: 1.5; margin-top: 10px;"><strong>⚠️ CRITICAL ROLE HIERARCHY RULE:</strong> In Discord <em>Server Settings -> Roles</em>, drag the Bot\'s managed role <strong>ABOVE</strong> all customer roles it will assign. Discord strictly blocks bots from assigning any role higher than or equal to their own rank.</div></div>')),
+                                        ]),
                                 ]),
                         ])
                         ->persistTabInQueryString(),

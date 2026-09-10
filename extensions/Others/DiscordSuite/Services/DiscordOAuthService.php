@@ -26,8 +26,9 @@ class DiscordOAuthService
 
     public function getAuthorizationUrl(User $user, ?string $customRedirect = null): string
     {
-        if (!$this->clientId) {
-            throw new Exception('Discord Client ID is missing. Configure it in Discord Suite admin settings.');
+        $clientId = $this->clientId ?: $this->apiService->getClientId();
+        if (!$clientId) {
+            throw new Exception('Discord Application (Client) ID is not configured. Please add your Client ID in Admin -> Discord Suite -> Settings.');
         }
 
         $state = Str::random(40);
@@ -38,7 +39,7 @@ class DiscordOAuthService
         $scopes = ['identify', 'email', 'guilds', 'guilds.join', 'role_connections.write'];
 
         $params = http_build_query([
-            'client_id' => $this->clientId,
+            'client_id' => $clientId,
             'redirect_uri' => $redirectUri,
             'response_type' => 'code',
             'scope' => implode(' ', $scopes),
@@ -58,7 +59,10 @@ class DiscordOAuthService
 
     public function exchangeCodeForToken(string $code, ?string $customRedirect = null): array
     {
-        if (!$this->clientId || !$this->clientSecret) {
+        $clientId = $this->clientId ?: $this->apiService->getClientId();
+        $clientSecret = $this->clientSecret ?: $this->apiService->getClientSecret();
+
+        if (!$clientId || !$clientSecret) {
             throw new Exception('Discord OAuth credentials (Client ID / Client Secret) are not configured.');
         }
 

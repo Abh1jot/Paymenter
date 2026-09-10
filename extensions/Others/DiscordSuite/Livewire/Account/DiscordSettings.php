@@ -27,7 +27,7 @@ class DiscordSettings extends Component
         $user = Auth::user();
         if ($user) {
             $this->account = LinkedDiscordAccount::where('user_id', $user->id)->first();
-            $this->isLinked = $this->account !== null;
+            $this->isLinked = $this->account !== null && !empty($this->account->discord_user_id) && !empty($this->account->access_token);
         }
     }
 

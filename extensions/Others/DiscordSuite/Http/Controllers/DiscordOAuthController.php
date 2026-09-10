@@ -35,7 +35,7 @@ class DiscordOAuthController extends Controller
         } catch (Exception $e) {
             Log::error("Discord OAuth redirect error: " . $e->getMessage());
 
-            return redirect()->route('account')->with('error', 'Failed initiating Discord connection: ' . $e->getMessage());
+            return redirect()->route('discord-suite.account.settings')->with('error', 'Failed initiating Discord connection: ' . $e->getMessage());
         }
     }
 
@@ -50,11 +50,11 @@ class DiscordOAuthController extends Controller
         $state = $request->get('state');
 
         if (!$code || !$state) {
-            return redirect()->route('account')->with('error', 'Discord authorization cancelled or missing parameters.');
+            return redirect()->route('discord-suite.account.settings')->with('error', 'Discord authorization cancelled or missing parameters.');
         }
 
         if (!$this->oauthService->validateState($state)) {
-            return redirect()->route('account')->with('error', 'Invalid OAuth security state. Please try again.');
+            return redirect()->route('discord-suite.account.settings')->with('error', 'Invalid OAuth security state. Please try again.');
         }
 
         try {
@@ -72,11 +72,11 @@ class DiscordOAuthController extends Controller
             SyncUserRolesJob::dispatch($user->id);
             SyncLinkedRolesJob::dispatch($user->id);
 
-            return redirect()->route('account')->with('success', "Discord account @{$discordUser['username']} successfully linked!");
+            return redirect()->route('discord-suite.account.settings')->with('success', "Discord account @{$discordUser['username']} successfully linked!");
         } catch (Exception $e) {
             Log::error("Discord OAuth callback error: " . $e->getMessage());
 
-            return redirect()->route('account')->with('error', 'Failed to link Discord account: ' . $e->getMessage());
+            return redirect()->route('discord-suite.account.settings')->with('error', 'Failed to link Discord account: ' . $e->getMessage());
         }
     }
 
@@ -95,6 +95,6 @@ class DiscordOAuthController extends Controller
             SyncUserRolesJob::dispatch($user->id);
         }
 
-        return redirect()->route('account')->with('success', 'Discord account unlinked successfully.');
+        return redirect()->route('discord-suite.account.settings')->with('success', 'Discord account unlinked successfully.');
     }
 }

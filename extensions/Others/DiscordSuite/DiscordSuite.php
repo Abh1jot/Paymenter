@@ -145,9 +145,12 @@ class DiscordSuite extends Extension
         // 6. Navigation Hooks
         // Hook into Customer Dashboard sidebar navigation (/dashboard) directly under Services (priority 25)
         Event::listen('navigation.dashboard', function () {
+            $user = \Illuminate\Support\Facades\Auth::user();
+            $linked = $user ? LinkedDiscordAccount::where('user_id', $user->id)->whereNotNull('access_token')->exists() : false;
+
             return [
-                'name' => 'Link Discord',
-                'url' => route('discord-suite.account.settings'),
+                'name' => $linked ? 'Discord Account' : 'Link Discord',
+                'url' => $linked ? route('discord-suite.account.settings') : route('discord-suite.oauth.redirect'),
                 'icon' => 'ri-discord',
                 'priority' => 25,
             ];
@@ -155,9 +158,12 @@ class DiscordSuite extends Extension
 
         // Hook into Account Dropdown menu
         Event::listen('navigation.account-dropdown', function () {
+            $user = \Illuminate\Support\Facades\Auth::user();
+            $linked = $user ? LinkedDiscordAccount::where('user_id', $user->id)->whereNotNull('access_token')->exists() : false;
+
             return [
-                'name' => 'Link Discord',
-                'url' => route('discord-suite.account.settings'),
+                'name' => $linked ? 'Discord Account' : 'Link Discord',
+                'url' => $linked ? route('discord-suite.account.settings') : route('discord-suite.oauth.redirect'),
                 'icon' => 'ri-discord',
                 'priority' => 25,
             ];

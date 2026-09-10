@@ -20,26 +20,57 @@ class DiscordApiService
 
     public function __construct()
     {
-        $extension = ExtensionHelper::getExtension('other', 'DiscordSuite');
+        $this->loadCredentials();
+    }
+
+    public function loadCredentials(): void
+    {
+        $extension = \App\Models\Extension::where('extension', 'DiscordSuite')->first();
         if ($extension) {
-            $this->botToken = $extension->config('bot_token');
-            $this->clientId = $extension->config('client_id');
-            $this->clientSecret = $extension->config('client_secret');
+            $settings = $extension->settings->pluck('value', 'key')->toArray();
+            $this->botToken = $settings['bot_token'] ?? $this->botToken;
+            $this->clientId = $settings['client_id'] ?? $this->clientId;
+            $this->clientSecret = $settings['client_secret'] ?? $this->clientSecret;
+        }
+
+        if (!$this->botToken || !$this->clientId) {
+            try {
+                $helperExt = ExtensionHelper::getExtension('other', 'DiscordSuite');
+                if ($helperExt) {
+                    $this->botToken = $this->botToken ?: $helperExt->config('bot_token');
+                    $this->clientId = $this->clientId ?: $helperExt->config('client_id');
+                    $this->clientSecret = $this->clientSecret ?: $helperExt->config('client_secret');
+                }
+            } catch (\Exception) {
+                // ExtensionHelper could not find extension instance
+            }
         }
     }
 
     public function getBotToken(): ?string
     {
+        if (!$this->botToken) {
+            $this->loadCredentials();
+        }
+
         return $this->botToken;
     }
 
     public function getClientId(): ?string
     {
+        if (!$this->clientId) {
+            $this->loadCredentials();
+        }
+
         return $this->clientId;
     }
 
     public function getClientSecret(): ?string
     {
+        if (!$this->clientSecret) {
+            $this->loadCredentials();
+        }
+
         return $this->clientSecret;
     }
 
