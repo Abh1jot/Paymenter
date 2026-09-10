@@ -66,6 +66,7 @@ class DiscordSettings extends Component
             'guilds' => $guilds,
         ])->layoutData([
             'sidebar' => true,
+            'title' => 'Discord',
         ]);
     }
 }

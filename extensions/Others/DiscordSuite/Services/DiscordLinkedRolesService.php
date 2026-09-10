@@ -53,12 +53,6 @@ class DiscordLinkedRolesService
                 'description' => 'Email verified or has paid at least 1 invoice',
                 'type' => 7, // BOOLEAN_EQUAL
             ],
-            [
-                'key' => 'support_level',
-                'name' => 'Support Level',
-                'description' => 'Customer support tier ranking',
-                'type' => 2, // INTEGER_GREATER_THAN_OR_EQUAL
-            ],
         ];
 
         return $this->apiService->registerRoleConnectionMetadata($schema);
@@ -123,7 +117,6 @@ class DiscordLinkedRolesService
                 'account_age_days' => $accountAgeDays,
                 'invoices_paid' => $invoicesPaidCount,
                 'is_verified' => $isVerified,
-                'support_level' => $supportLevel,
             ],
         ];
 

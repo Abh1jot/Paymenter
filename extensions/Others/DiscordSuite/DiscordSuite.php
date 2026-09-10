@@ -150,9 +150,10 @@ class DiscordSuite extends Extension
 
             return [
                 'name' => $linked ? 'Discord Account' : 'Link Discord',
-                'url' => $linked ? route('discord-suite.account.settings') : route('discord-suite.oauth.redirect'),
+                'url' => route('discord-suite.account.settings'),
                 'icon' => 'ri-discord',
                 'priority' => 25,
+                'spa' => true,
             ];
         });
 
@@ -163,9 +164,23 @@ class DiscordSuite extends Extension
 
             return [
                 'name' => $linked ? 'Discord Account' : 'Link Discord',
-                'url' => $linked ? route('discord-suite.account.settings') : route('discord-suite.oauth.redirect'),
+                'url' => route('discord-suite.account.settings'),
                 'icon' => 'ri-discord',
                 'priority' => 25,
+                'spa' => true,
+            ];
+        });
+
+        // Hook into Account Sub-navigation (/account sidebar)
+        Event::listen('navigation.account', function () {
+            $user = \Illuminate\Support\Facades\Auth::user();
+            $linked = $user ? LinkedDiscordAccount::where('user_id', $user->id)->whereNotNull('access_token')->exists() : false;
+
+            return [
+                'name' => $linked ? 'Discord Account' : 'Link Discord',
+                'url' => route('discord-suite.account.settings'),
+                'priority' => 35,
+                'spa' => true,
             ];
         });
 
