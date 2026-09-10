@@ -11,9 +11,9 @@ use Filament\Forms\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Schema;
 use Paymenter\Extensions\Others\DiscordSuite\Admin\Clusters\DiscordSuiteCluster;
 use Paymenter\Extensions\Others\DiscordSuite\Services\DiscordApiService;
 use Paymenter\Extensions\Others\DiscordSuite\Services\DiscordInteractionService;
@@ -46,10 +46,10 @@ class BotSettings extends Page implements HasForms
         }
     }
 
-    public function form(Form $form): Form
+    public function form(Schema $schema): Schema
     {
-        return $form
-            ->schema([
+        return $schema
+            ->components([
                 Section::make('Discord Bot & Application Credentials')
                     ->description('Enter your credentials from the Discord Developer Portal')
                     ->schema([
