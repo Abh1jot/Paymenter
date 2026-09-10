@@ -47,7 +47,7 @@ class DiscordOAuthService
             'prompt' => 'consent',
         ]);
 
-        return "https://discord.com/api/oauth2/authorize?{$params}";
+        return "https://discord.com/oauth2/authorize?{$params}";
     }
 
     public function validateState(string $state): bool
