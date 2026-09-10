@@ -29,21 +29,13 @@ class BotSettings extends Page implements HasForms
 
     protected static string|\BackedEnum|null $activeNavigationIcon = 'ri-robot-2-fill';
 
-    protected static ?string $navigationLabel = 'Bot & Setup Guide';
-
-    protected static ?int $navigationSort = 3;
-
-    protected string $view = 'discord_suite::admin.bot-settings';
+    protected static bool $shouldRegisterNavigation = false;
 
     public ?array $data = [];
 
     public function mount(): void
     {
-        $extension = Extension::where('extension', 'DiscordSuite')->first();
-        if ($extension) {
-            $settings = $extension->settings->pluck('value', 'key')->toArray();
-            $this->form->fill($settings);
-        }
+        $this->redirect(Settings::getUrl());
     }
 
     public function form(Schema $schema): Schema

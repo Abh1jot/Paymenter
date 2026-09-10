@@ -49,7 +49,7 @@ class DiscordSuite extends Extension
             [
                 'name' => 'Notice',
                 'type' => 'placeholder',
-                'label' => new HtmlString('Configure Discord credentials, test bot connection, and view step-by-step guides by visiting the <a class="text-primary-600 font-bold underline" href="' . url('/admin/discord-suite/bot-settings') . '">Discord Suite Admin Suite</a>.'),
+                'label' => new HtmlString('Configure Discord credentials, test bot connection, and view step-by-step guides by visiting the <a class="text-primary-600 font-bold underline" href="' . url('/admin/discord-suite/settings') . '">Discord Suite Settings</a>.'),
             ],
             [
                 'name' => 'client_id',

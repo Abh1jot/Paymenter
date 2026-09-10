@@ -26,38 +26,13 @@ class NotificationSettings extends Page implements HasForms
 
     protected static string|\BackedEnum|null $activeNavigationIcon = 'ri-notification-3-fill';
 
-    protected static ?string $navigationLabel = 'Notification Settings';
-
-    protected static ?int $navigationSort = 4;
-
-    protected string $view = 'discord_suite::admin.notification-settings';
+    protected static bool $shouldRegisterNavigation = false;
 
     public ?array $data = [];
 
     public function mount(): void
     {
-        $extension = Extension::where('extension', 'DiscordSuite')->first();
-        if ($extension) {
-            $settings = $extension->settings->pluck('value', 'key')->toArray();
-
-            // Default all notifications to true if not explicitly disabled
-            $defaultEvents = [
-                'notify_invoice_created' => true,
-                'notify_invoice_paid' => true,
-                'notify_invoice_overdue' => true,
-                'notify_service_activated' => true,
-                'notify_service_suspended' => true,
-                'notify_service_unsuspended' => true,
-                'notify_service_expiring' => true,
-                'notify_service_terminated' => true,
-                'notify_ticket_reply' => true,
-                'notify_product_upgraded' => true,
-                'notify_credit_added' => true,
-                'embed_color' => '#5865F2',
-            ];
-
-            $this->form->fill(array_merge($defaultEvents, $settings));
-        }
+        $this->redirect(Settings::getUrl());
     }
 
     public function form(Schema $schema): Schema
