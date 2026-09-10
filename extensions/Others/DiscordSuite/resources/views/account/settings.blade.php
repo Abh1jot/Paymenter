@@ -3,8 +3,8 @@
 
     <div class="flex items-center justify-between mb-8">
         <div>
-            <h1 class="text-2xl font-bold text-base">Discord Account Integration</h1>
-            <p class="text-sm text-base/60 mt-1">Manage connected Discord profile, servers, role sync, and linked roles metadata</p>
+            <h1 class="text-2xl font-bold text-base">Link Discord</h1>
+            <p class="text-sm text-base/60 mt-1">Connect your Discord profile, synchronize customer roles, and access community servers</p>
         </div>
         @if($isLinked)
             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">

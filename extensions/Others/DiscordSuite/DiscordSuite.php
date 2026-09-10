@@ -143,22 +143,22 @@ class DiscordSuite extends Extension
         Event::listen(TicketMessageCreated::class, HandleTicketMessageCreated::class);
 
         // 6. Navigation Hooks
-        // Hook into Customer Account navigation (/account)
-        Event::listen('navigation.account', function () {
+        // Hook into Customer Dashboard sidebar navigation (/dashboard) directly under Services (priority 25)
+        Event::listen('navigation.dashboard', function () {
             return [
-                'name' => 'Discord Account',
+                'name' => 'Link Discord',
                 'url' => route('discord-suite.account.settings'),
-                'icon' => 'ri-discord-line',
-                'priority' => 35,
+                'icon' => 'ri-discord',
+                'priority' => 25,
             ];
         });
 
         // Hook into Account Dropdown menu
         Event::listen('navigation.account-dropdown', function () {
             return [
-                'name' => 'Discord Integration',
+                'name' => 'Link Discord',
                 'url' => route('discord-suite.account.settings'),
-                'icon' => 'ri-discord-line',
+                'icon' => 'ri-discord',
                 'priority' => 25,
             ];
         });

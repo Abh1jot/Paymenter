@@ -7,7 +7,7 @@
                 </svg>
             </div>
             <div>
-                <h3 class="font-semibold text-lg text-base">Discord Integration</h3>
+                <h3 class="font-semibold text-lg text-base">Link Discord</h3>
                 <p class="text-xs text-base/60">Community roles, notifications & bot access</p>
             </div>
         </div>
