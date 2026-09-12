@@ -7,6 +7,7 @@ use App\Models\Service;
 use App\Models\User;
 use Exception;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Paymenter\Extensions\Others\DiscordSuite\Models\LinkedDiscordAccount;
 use Paymenter\Extensions\Others\DiscordSuite\Repositories\GuildRepository;
@@ -37,9 +38,13 @@ class RoleSyncEngine
             ->with(['product.category'])
             ->get();
 
-        $paidInvoicesSum = (float) $user->invoices()
-            ->where('status', Invoice::STATUS_PAID)
-            ->sum('total');
+        // 'total' is a PHP accessor (price * quantity on items), not a real DB column.
+        // Sum it at the DB level by joining invoice_items.
+        $paidInvoicesSum = (float) DB::table('invoices')
+            ->join('invoice_items', 'invoices.id', '=', 'invoice_items.invoice_id')
+            ->where('invoices.user_id', $user->id)
+            ->where('invoices.status', Invoice::STATUS_PAID)
+            ->sum(DB::raw('invoice_items.price * invoice_items.quantity'));
 
         $guilds = $this->guildRepository->getAll();
         if ($guilds->isEmpty()) {
@@ -105,7 +110,7 @@ class RoleSyncEngine
                 $qualifies = $activeServices->contains(fn ($service) => $service->product?->category_id == $rule->target_id);
             } elseif ($rule->rule_type === 'customer_tier') {
                 $qualifies = match ($rule->tier_type) {
-                    'verified' => $user->email_verified_at !== null || $user->invoices()->where('status', Invoice::STATUS_PAID)->exists(),
+                    'verified' => $user->email_verified_at !== null || DB::table('invoices')->where('user_id', $user->id)->where('status', Invoice::STATUS_PAID)->exists(),
                     'active' => $activeServices->isNotEmpty(),
                     'premium' => $paidInvoicesSum >= ($rule->min_spend ?: 100),
                     'vps' => $activeServices->contains(fn ($s) =>
