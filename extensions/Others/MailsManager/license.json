@@ -1,0 +1,11 @@
+﻿{
+  "product": "MailsManager for Paymenter",
+  "version": "1.0.0",
+  "distribution": "BuiltByBit Official Marketplace",
+  "buyer_id": "%%__USER__%%",
+  "buyer_username": "%%__USERNAME__%%",
+  "resource_id": "%%__RESOURCE__%%",
+  "download_nonce": "%%__NONCE__%%",
+  "timestamp": "%%__TIMESTAMP__%%",
+  "tamper_hash": "sha256:mm-%%__NONCE__%%-%%__USER__%%"
+}
