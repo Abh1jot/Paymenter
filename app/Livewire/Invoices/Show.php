@@ -6,6 +6,7 @@ use App\Classes\PDF;
 use App\Enums\InvoiceTransactionStatus;
 use App\Helpers\ExtensionHelper;
 use App\Livewire\Component;
+use App\Models\Credit;
 use App\Models\Gateway;
 use App\Models\Invoice;
 use App\Models\Service;
@@ -44,7 +45,7 @@ class Show extends Component
         }
 
         // Load relations
-        $this->invoice->load('transactions', 'transactions.gateway', 'transactions.invoice');
+        $this->invoice->load('transactions', 'transactions.gateway', 'transactions.invoice', 'adjustmentNotes');
 
         if ($this->showPayModal && $this->invoice->status !== 'pending') {
             $this->showPayModal = false;
@@ -54,7 +55,7 @@ class Show extends Component
     #[Computed]
     public function gateways()
     {
-        return ExtensionHelper::getCheckoutGateways($this->invoice->total, $this->invoice->currency_code, 'invoice', $this->invoice->items);
+        return ExtensionHelper::getCheckoutGateways($this->invoice->remaining, $this->invoice->currency_code, 'invoice', $this->invoice->items);
     }
 
     #[Computed]
@@ -100,6 +101,10 @@ class Show extends Component
         }
 
         if ($this->selectedMethod === 'credit') {
+            if ($this->invoice->items->contains(fn ($item) => $item->reference_type === Credit::class)) {
+                return $this->notify(__('This invoice cannot be paid with credits.'), 'error');
+            }
+
             return $this->payWithCredit();
         }
 

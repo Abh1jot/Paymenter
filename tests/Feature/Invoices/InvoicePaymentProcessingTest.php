@@ -17,7 +17,7 @@ class InvoicePaymentProcessingTest extends TestCase
     private function createInvoiceWithItem($total = 100.00)
     {
         $user = User::factory()->create();
-        $invoice = Invoice::factory()->create(['user_id' => $user->id]);
+        $invoice = Invoice::factory()->create(['user_id' => $user->id, 'status' => 'pending']);
 
         $invoice->items()->create([
             'description' => 'Test Item',
@@ -28,12 +28,34 @@ class InvoicePaymentProcessingTest extends TestCase
         return $invoice->fresh();
     }
 
-    public function test_invoice_starts_with_pending_status()
+    public function test_invoice_starts_with_draft_status()
     {
-        $invoice = $this->createInvoiceWithItem();
+        $user = User::factory()->create();
+        $invoice = Invoice::factory()->create(['user_id' => $user->id]);
 
-        $this->assertEquals('pending', $invoice->status);
+        $invoice->items()->create([
+            'description' => 'Test Item',
+            'quantity' => 1,
+            'price' => 100.00,
+        ]);
+
+        $invoice = $invoice->fresh();
+
+        $this->assertEquals('draft', $invoice->status);
         $this->assertGreaterThan(0, $invoice->total);
+    }
+
+    public function test_pending_invoice_is_snapshotted_when_created()
+    {
+        config(['settings.invoice_snapshot' => true]);
+
+        $user = User::factory()->create();
+        $invoice = Invoice::factory()->create([
+            'user_id' => $user->id,
+            'status' => Invoice::STATUS_PENDING,
+        ]);
+
+        $this->assertSame($user->name, $invoice->fresh()->snapshot->name);
     }
 
     public function test_invoice_calculates_remaining_amount_correctly()
@@ -50,6 +72,44 @@ class InvoicePaymentProcessingTest extends TestCase
         ]);
 
         $this->assertEquals(70.00, $invoice->fresh()->remaining);
+    }
+
+    public function test_invoice_totals_are_calculated_without_floating_point_errors()
+    {
+        $invoice = $this->createInvoiceWithItem(0.10);
+        $invoice->items()->create([
+            'description' => 'Second Test Item',
+            'quantity' => 2,
+            'price' => 0.10,
+        ]);
+
+        $invoice->refresh();
+
+        $this->assertSame(0.30, $invoice->total);
+
+        $invoice->transactions()->create([
+            'amount' => 0.10,
+            'status' => InvoiceTransactionStatus::Succeeded,
+        ]);
+
+        $this->assertSame(0.20, $invoice->fresh()->remaining);
+    }
+
+    public function test_decimal_invoice_is_marked_paid_when_the_full_amount_is_paid()
+    {
+        $invoice = $this->createInvoiceWithItem(179.99);
+        $invoice->items()->create([
+            'description' => 'Second Test Item',
+            'quantity' => 1,
+            'price' => 69.99,
+        ]);
+
+        ExtensionHelper::addPayment($invoice->id, 'TestGateway', 249.98);
+
+        $invoice->refresh();
+
+        $this->assertSame('paid', $invoice->status);
+        $this->assertSame(0.0, $invoice->remaining);
     }
 
     public function test_successful_payment_marks_invoice_as_paid()

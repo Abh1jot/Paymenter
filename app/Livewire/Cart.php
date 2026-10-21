@@ -164,6 +164,7 @@ class Cart extends Component
                     'user_id' => $user->id,
                     'due_at' => now()->addDays(7),
                     'currency_code' => $cart->currency_code,
+                    'status' => Invoice::STATUS_PENDING,
                 ]);
                 $invoice->save();
             }
@@ -171,7 +172,7 @@ class Cart extends Component
             // Create the services
             foreach ($cart->items as $item) {
                 // Is it a lifetime coupon, then we can adjust the price of the service
-                if (is_object($this->coupon) && ($this->coupon->recurring === null || (int) $this->coupon->recurring == 1)) {
+                if (is_object($cart->coupon) && ($cart->coupon->recurring === null || (int) $cart->coupon->recurring == 1)) {
                     // Apply coupon only to first billing cycle (use original price for recurring)
                     $price = $item->price->original_price;
                 } else {
