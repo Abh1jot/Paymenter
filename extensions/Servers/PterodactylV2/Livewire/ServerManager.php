@@ -119,8 +119,16 @@ class ServerManager extends Component
                 $this->ssoUrl = route('pterodactylv2.sso-login', ['serviceId' => $service->id]);
             }
 
-            // Determine status
-            $this->currentState = $server->isSuspended ? 'suspended' : ($server->isInstalling ? 'installing' : 'active');
+            // Determine status based on Paymenter service status and Pterodactyl container state
+            if ($service->status === 'suspended' || $server->isSuspended) {
+                $this->currentState = 'suspended';
+            } elseif ($server->isInstalling) {
+                $this->currentState = 'installing';
+            } elseif (in_array($service->status, ['cancelled', 'terminated'])) {
+                $this->currentState = $service->status;
+            } else {
+                $this->currentState = 'active';
+            }
 
             // Format RAM & Disk
             $ramFormatted = $server->memoryLimit > 0

@@ -22,7 +22,14 @@ class LifecycleService
     public static function suspend(Service $service, PterodactylClient $client): bool
     {
         $server = ServerResolver::resolve($service, $client, failIfNotFound: true);
-        $client->appRequest("servers/{$server->id}/suspend", 'POST');
+        try {
+            $client->appRequest("servers/{$server->id}/suspend", 'POST');
+        } catch (Exception $e) {
+            if (str_contains(strtolower($e->getMessage()), 'already suspended') || str_contains(strtolower($e->getMessage()), 'suspended')) {
+                return true;
+            }
+            throw $e;
+        }
         return true;
     }
 
@@ -34,7 +41,14 @@ class LifecycleService
     public static function unsuspend(Service $service, PterodactylClient $client): bool
     {
         $server = ServerResolver::resolve($service, $client, failIfNotFound: true);
-        $client->appRequest("servers/{$server->id}/unsuspend", 'POST');
+        try {
+            $client->appRequest("servers/{$server->id}/unsuspend", 'POST');
+        } catch (Exception $e) {
+            if (str_contains(strtolower($e->getMessage()), 'not suspended') || str_contains(strtolower($e->getMessage()), 'already active')) {
+                return true;
+            }
+            throw $e;
+        }
         return true;
     }
 
@@ -45,18 +59,29 @@ class LifecycleService
      */
     public static function terminate(Service $service, PterodactylClient $client): bool
     {
-        $server = ServerResolver::resolve($service, $client, failIfNotFound: true);
+        $server = ServerResolver::resolve($service, $client, failIfNotFound: false);
 
-        // Security check: Validate that the external_id matches the service ID,
-        // or that the server ID matches the stored mapping to prevent accidental deletion
+        if (!$server) {
+            // Already deleted on Pterodactyl; safely purge properties and complete
+            $service->properties()->whereIn('key', ['ptero_server_id', 'ptero_server_uuid', 'ptero_identifier', 'server_id', 'ptero_password', 'epc_password'])->delete();
+            return true;
+        }
+
+        // Security check: Validate that the external_id matches the service ID
         if ($server->externalId !== null && (string) $server->externalId !== (string) $service->id) {
             throw new Exception("Safety mismatch: Pterodactyl server #{$server->id} has external_id '{$server->externalId}' which does not match Service ID '{$service->id}'. Aborting termination.");
         }
 
-        $client->appRequest("servers/{$server->id}", 'DELETE');
+        try {
+            $client->appRequest("servers/{$server->id}", 'DELETE');
+        } catch (Exception $e) {
+            if (!str_contains($e->getMessage(), '404') && !str_contains(strtolower($e->getMessage()), 'not found')) {
+                throw $e;
+            }
+        }
 
         // Clean up cached properties
-        $service->properties()->whereIn('key', ['ptero_server_id', 'ptero_server_uuid', 'ptero_identifier'])->delete();
+        $service->properties()->whereIn('key', ['ptero_server_id', 'ptero_server_uuid', 'ptero_identifier', 'server_id', 'ptero_password', 'epc_password'])->delete();
 
         return true;
     }
