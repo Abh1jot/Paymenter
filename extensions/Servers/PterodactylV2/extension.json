@@ -1,0 +1,9 @@
+{
+    "name": "PterodactylV2",
+    "display_name": "Pterodactyl v2 & v1 Multi-Version",
+    "version": "2.0.0",
+    "type": "server",
+    "author": "Antigravity Engineering",
+    "website": "https://builtbybit.com",
+    "description": "Enterprise Pterodactyl v2.0+ and v1.x server provisioning and real-time management extension for Paymenter with full backward compatibility."
+}
