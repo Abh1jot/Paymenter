@@ -6,39 +6,29 @@ use App\Models\Service;
 use Exception;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
-use Paymenter\Extensions\Servers\PterodactylV2\DTO\ResourceUsage;
-use Paymenter\Extensions\Servers\PterodactylV2\DTO\ServerDetails;
 use Paymenter\Extensions\Servers\PterodactylV2\Services\PasswordService;
-use Paymenter\Extensions\Servers\PterodactylV2\Services\PowerService;
 use Paymenter\Extensions\Servers\PterodactylV2\Services\PterodactylClient;
 use Paymenter\Extensions\Servers\PterodactylV2\Services\ServerResolver;
 
 /**
- * Customer and administrator server management Livewire component.
+ * Clean, lightweight server details Livewire component for customer service pages.
  *
- * Provides:
- * - Live power controls (Start, Restart, Stop, Kill)
- * - Real-time resource monitors (CPU, Memory, Disk, Network, Uptime)
- * - Server credentials and one-click password rotation
- * - Deep link to Pterodactyl and Wemx SSO integration
+ * Displays:
+ * - Server name, identifier, and connection address (IP:Port)
+ * - Pterodactyl node, allocated memory, disk, and CPU specs
+ * - Panel username, account email, and direct panel links
+ * - Password setup & reset instructions with panel deep-link
  */
 class ServerManager extends Component
 {
     public int $serviceId;
-    public string $activeTab = 'controls';
     public array $credentials = [];
-    public ?array $resources = null;
-    public string $currentState = 'offline';
+    public string $currentState = 'active';
     public bool $showPassword = false;
-    public ?string $newPassword = null;
-    public bool $passwordUpdated = false;
-    public ?string $actionLoading = null;
-    public ?string $statusMessage = null;
-    public string $statusType = 'success';
-    public bool $clientApiAvailable = false;
+    public ?string $panelUrl = null;
+    public ?string $resetPasswordUrl = null;
     public bool $ssoAvailable = false;
     public ?string $ssoUrl = null;
-    public ?string $panelUrl = null;
     public bool $loadFailed = false;
     public ?string $loadErrorMessage = null;
 
@@ -46,7 +36,6 @@ class ServerManager extends Component
     {
         $this->serviceId = is_object($service) ? (int) $service->id : (int) $service;
 
-        // Security authorization check
         $this->authorizeServiceAccess();
         $this->loadData();
     }
@@ -67,7 +56,7 @@ class ServerManager extends Component
         $isAdmin = method_exists($currentUser, 'isAdmin') ? $currentUser->isAdmin() : ($currentUser->is_admin ?? false);
 
         if (!$isOwner && !$isAdmin) {
-            abort(403, 'You do not have permission to manage this service.');
+            abort(403, 'You do not have permission to view this service.');
         }
 
         return $service;
@@ -96,7 +85,7 @@ class ServerManager extends Component
     }
 
     /**
-     * Load initial server data, credentials, and telemetry.
+     * Load server attributes, allocations, and credentials.
      */
     public function loadData(): void
     {
@@ -120,8 +109,9 @@ class ServerManager extends Component
                 return;
             }
 
-            $this->clientApiAvailable = $client->hasClientKey();
-            $this->panelUrl = $server->panelUrl;
+            $host = $client->getHost();
+            $this->panelUrl = $server->panelUrl ?: rtrim($host, '/') . "/server/{$server->identifier}";
+            $this->resetPasswordUrl = rtrim($host, '/') . '/auth/password';
 
             $config = $service->product->server->settings->pluck('value', 'key')->toArray();
             $this->ssoAvailable = !empty($config['sso_secret']);
@@ -129,7 +119,21 @@ class ServerManager extends Component
                 $this->ssoUrl = route('pterodactylv2.sso-login', ['serviceId' => $service->id]);
             }
 
-            // Populate Credentials
+            // Determine status
+            $this->currentState = $server->isSuspended ? 'suspended' : ($server->isInstalling ? 'installing' : 'active');
+
+            // Format RAM & Disk
+            $ramFormatted = $server->memoryLimit > 0
+                ? ($server->memoryLimit >= 1024 ? round($server->memoryLimit / 1024, 1) . ' GB' : $server->memoryLimit . ' MB')
+                : 'Unlimited';
+
+            $diskFormatted = $server->diskLimit > 0
+                ? ($server->diskLimit >= 1024 ? round($server->diskLimit / 1024, 1) . ' GB' : $server->diskLimit . ' MB')
+                : 'Unlimited';
+
+            $cpuFormatted = $server->cpuLimit > 0 ? $server->cpuLimit . '%' : 'Unlimited';
+
+            // Populate credentials
             $storedPassword = PasswordService::getStoredPassword($service);
             $this->credentials = [
                 'server_name' => $server->name,
@@ -142,37 +146,11 @@ class ServerManager extends Component
                 'port' => $server->port,
                 'email' => $service->user->email,
                 'username' => $service->user->name ?: 'User',
-                'password' => $this->newPassword ?: $storedPassword,
-                'memory_limit' => $server->memoryLimit,
-                'disk_limit' => $server->diskLimit,
-                'cpu_limit' => $server->cpuLimit,
+                'password' => $storedPassword,
+                'memory_formatted' => $ramFormatted,
+                'disk_formatted' => $diskFormatted,
+                'cpu_formatted' => $cpuFormatted,
             ];
-
-            // Fetch live telemetry if Client API key is configured
-            if ($this->clientApiAvailable) {
-                $usage = PowerService::getResourceUsage($service, $server, $client);
-                if ($usage) {
-                    $this->currentState = $usage->currentState;
-                    $this->resources = [
-                        'current_state' => $usage->currentState,
-                        'is_suspended' => $usage->isSuspended,
-                        'memory_mb' => $usage->memoryMb,
-                        'memory_limit_mb' => $usage->memoryLimitMb,
-                        'memory_percentage' => $usage->memoryPercentage,
-                        'cpu_absolute' => $usage->cpuAbsolute,
-                        'cpu_limit' => $usage->cpuLimit,
-                        'cpu_percentage' => $usage->cpuPercentage,
-                        'disk_mb' => $usage->diskMb,
-                        'disk_limit_mb' => $usage->diskLimitMb,
-                        'disk_percentage' => $usage->diskPercentage,
-                        'network_rx' => $usage->networkRxFormatted,
-                        'network_tx' => $usage->networkTxFormatted,
-                        'uptime' => $usage->uptimeFormatted,
-                    ];
-                }
-            } else {
-                $this->currentState = $server->isSuspended ? 'suspended' : ($server->isInstalling ? 'installing' : 'active');
-            }
         } catch (Exception $e) {
             $this->loadFailed = true;
             $this->loadErrorMessage = $e->getMessage();
@@ -180,130 +158,11 @@ class ServerManager extends Component
     }
 
     /**
-     * Polling method called periodically by wire:poll to refresh telemetry.
-     */
-    public function pollResources(): void
-    {
-        if (!$this->clientApiAvailable || $this->loadFailed) {
-            return;
-        }
-
-        try {
-            $service = $this->authorizeServiceAccess();
-            $client = $this->getClient($service);
-            if ($client) {
-                $server = ServerResolver::resolve($service, $client, failIfNotFound: false);
-                if ($server) {
-                    $usage = PowerService::getResourceUsage($service, $server, $client);
-                    if ($usage) {
-                        $this->currentState = $usage->currentState;
-                        $this->resources = [
-                            'current_state' => $usage->currentState,
-                            'is_suspended' => $usage->isSuspended,
-                            'memory_mb' => $usage->memoryMb,
-                            'memory_limit_mb' => $usage->memoryLimitMb,
-                            'memory_percentage' => $usage->memoryPercentage,
-                            'cpu_absolute' => $usage->cpuAbsolute,
-                            'cpu_limit' => $usage->cpuLimit,
-                            'cpu_percentage' => $usage->cpuPercentage,
-                            'disk_mb' => $usage->diskMb,
-                            'disk_limit_mb' => $usage->diskLimitMb,
-                            'disk_percentage' => $usage->diskPercentage,
-                            'network_rx' => $usage->networkRxFormatted,
-                            'network_tx' => $usage->networkTxFormatted,
-                            'uptime' => $usage->uptimeFormatted,
-                        ];
-                    }
-                }
-            }
-        } catch (Exception $e) {
-            // Silently ignore transient poll errors
-        }
-    }
-
-    /**
-     * Dispatch a power action to the server (start, stop, restart, kill).
-     */
-    public function powerAction(string $signal): void
-    {
-        $this->actionLoading = $signal;
-        $this->statusMessage = null;
-
-        try {
-            $service = $this->authorizeServiceAccess();
-            $client = $this->getClient($service);
-
-            if (!$client) {
-                throw new Exception('Pterodactyl configuration missing.');
-            }
-
-            PowerService::sendPowerAction($service, $signal, $client);
-
-            $actionLabels = [
-                'start' => 'Server boot signal sent.',
-                'restart' => 'Server restart signal sent.',
-                'stop' => 'Server graceful stop signal sent.',
-                'kill' => 'Server kill signal dispatched.',
-            ];
-
-            $this->statusType = 'success';
-            $this->statusMessage = $actionLabels[$signal] ?? "Power action '{$signal}' sent successfully.";
-
-            // Fast refresh
-            $this->pollResources();
-        } catch (Exception $e) {
-            $this->statusType = 'error';
-            $this->statusMessage = 'Failed to execute power action: ' . $e->getMessage();
-        } finally {
-            $this->actionLoading = null;
-        }
-    }
-
-    /**
-     * Toggle visibility of the password on the credentials card.
+     * Toggle visibility of the initial password if stored.
      */
     public function togglePassword(): void
     {
         $this->showPassword = !$this->showPassword;
-    }
-
-    /**
-     * Generate a new panel password for the customer and sync it to Pterodactyl.
-     */
-    public function generatePassword(): void
-    {
-        $this->actionLoading = 'password';
-        $this->statusMessage = null;
-
-        try {
-            $service = $this->authorizeServiceAccess();
-            $client = $this->getClient($service);
-
-            if (!$client) {
-                throw new Exception('Pterodactyl configuration missing.');
-            }
-
-            $password = PasswordService::generateAndSyncPassword($service, $client);
-            $this->newPassword = $password;
-            $this->credentials['password'] = $password;
-            $this->showPassword = true;
-            $this->passwordUpdated = true;
-            $this->statusType = 'success';
-            $this->statusMessage = 'Password regenerated and updated on Pterodactyl panel successfully.';
-        } catch (Exception $e) {
-            $this->statusType = 'error';
-            $this->statusMessage = 'Failed to generate password: ' . $e->getMessage();
-        } finally {
-            $this->actionLoading = null;
-        }
-    }
-
-    /**
-     * Switch view tabs.
-     */
-    public function setTab(string $tab): void
-    {
-        $this->activeTab = $tab;
     }
 
     public function render()

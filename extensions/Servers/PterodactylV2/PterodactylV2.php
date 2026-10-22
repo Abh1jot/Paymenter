@@ -479,7 +479,7 @@ class PterodactylV2 extends Server
             [
                 'type' => 'view',
                 'name' => 'server_manager',
-                'label' => 'Server Management',
+                'label' => 'Server Details',
             ],
         ];
 
