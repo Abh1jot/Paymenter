@@ -69,8 +69,18 @@ class PterodactylClient
      */
     protected function sendRequest(string $token, string $path, string $method, array $data = []): array
     {
-        $url = $this->host . $path;
         $method = strtolower($method);
+
+        if (str_contains($path, '?')) {
+            [$pathOnly, $queryString] = explode('?', $path, 2);
+            parse_str($queryString, $queryParams);
+            if (in_array($method, ['get', 'delete'])) {
+                $data = array_merge($queryParams, $data);
+            }
+            $path = $pathOnly;
+        }
+
+        $url = $this->host . $path;
 
         try {
             $httpClient = Http::withHeaders([
@@ -81,7 +91,7 @@ class PterodactylClient
 
             /** @var Response $response */
             if (in_array($method, ['get', 'delete'])) {
-                $response = $httpClient->$method($url, $data);
+                $response = !empty($data) ? $httpClient->$method($url, $data) : $httpClient->$method($url);
             } else {
                 $response = $httpClient->$method($url, $data);
             }

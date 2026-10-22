@@ -54,14 +54,15 @@ class ProvisioningService
         }
 
         // Automatic fallback for common egg variables if not returned in relationships
-        $startupStr = $eggAttributes['startup'] ?? '';
-        if (!isset($environment['SERVER_JARFILE']) && str_contains($startupStr, 'SERVER_JARFILE')) {
+        $scriptStr = ($eggAttributes['startup'] ?? '') . ' ' . json_encode($eggAttributes['script'] ?? []);
+        $eggName = $eggAttributes['name'] ?? '';
+        if (!isset($environment['SERVER_JARFILE']) && (str_contains($scriptStr, 'SERVER_JARFILE') || str_contains($eggName, 'Paper') || str_contains($eggName, 'Minecraft'))) {
             $environment['SERVER_JARFILE'] = $mergedSettings['SERVER_JARFILE'] ?? 'server.jar';
         }
-        if (!isset($environment['BUILD_NUMBER']) && str_contains($startupStr, 'BUILD_NUMBER')) {
+        if (!isset($environment['BUILD_NUMBER']) && (str_contains($scriptStr, 'BUILD_NUMBER') || str_contains($eggName, 'Paper'))) {
             $environment['BUILD_NUMBER'] = $mergedSettings['BUILD_NUMBER'] ?? 'latest';
         }
-        if (!isset($environment['MINECRAFT_VERSION']) && str_contains($startupStr, 'MINECRAFT_VERSION')) {
+        if (!isset($environment['MINECRAFT_VERSION']) && (str_contains($scriptStr, 'MINECRAFT_VERSION') || str_contains($eggName, 'Minecraft') || str_contains($eggName, 'Paper'))) {
             $environment['MINECRAFT_VERSION'] = $mergedSettings['MINECRAFT_VERSION'] ?? 'latest';
         }
 
@@ -148,9 +149,19 @@ class ProvisioningService
             throw new Exception('Product configuration is missing required egg_id.');
         }
 
-        // Strategy 1: Fetch from eggs list with include=variables (standard in Panel 2.0 to obtain variable definitions)
+        // Strategy 1: Direct single egg endpoint with variables included
         try {
-            $allEggs = $client->appRequest('eggs?include=variables');
+            $data = $client->appRequest("eggs/{$eggId}", 'GET', ['include' => 'variables']);
+            if (isset($data['attributes'])) {
+                return $data;
+            }
+        } catch (Exception $e) {
+            // Fall through
+        }
+
+        // Strategy 2: Fetch from eggs list with include=variables
+        try {
+            $allEggs = $client->appRequest('eggs', 'GET', ['include' => 'variables']);
             if (!empty($allEggs['data']) && is_array($allEggs['data'])) {
                 foreach ($allEggs['data'] as $eggItem) {
                     if ((int) ($eggItem['attributes']['id'] ?? 0) === $eggId) {
@@ -162,19 +173,9 @@ class ProvisioningService
             // Fall through
         }
 
-        // Strategy 2: Direct single egg endpoint
-        try {
-            $data = $client->appRequest("eggs/{$eggId}?include=variables");
-            if (isset($data['attributes'])) {
-                return $data;
-            }
-        } catch (Exception $e) {
-            // Fall through
-        }
-
         // Strategy 3: Nested endpoint (Standard for Panel 1.x)
         if ($nestId) {
-            $data = $client->appRequest("nests/{$nestId}/eggs/{$eggId}?include=variables");
+            $data = $client->appRequest("nests/{$nestId}/eggs/{$eggId}", 'GET', ['include' => 'variables']);
             if (isset($data['attributes'])) {
                 return $data;
             }
