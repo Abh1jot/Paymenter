@@ -117,14 +117,23 @@ class PterodactylV2 extends Server
     }
 
     /**
-     * Build an authenticated PterodactylClient instance from current configuration.
+     * Build an authenticated PterodactylClient instance from current configuration or service product server.
      */
-    public function getClient(): PterodactylClient
+    public function getClient(?Service $service = null): PterodactylClient
     {
+        $serverSettings = [];
+        if ($service && $service->product?->server?->settings) {
+            $serverSettings = $service->product->server->settings->pluck('value', 'key')->toArray();
+        }
+
+        $host = $serverSettings['host'] ?? $this->config('host') ?? '';
+        $appKey = $serverSettings['api_key'] ?? $this->config('api_key') ?? '';
+        $clientKey = $serverSettings['client_api_key'] ?? $this->config('client_api_key');
+
         return new PterodactylClient(
-            host: (string) ($this->config('host') ?? ''),
-            appApiKey: (string) ($this->config('api_key') ?? ''),
-            clientApiKey: $this->config('client_api_key')
+            host: (string) $host,
+            appApiKey: (string) $appKey,
+            clientApiKey: $clientKey
         );
     }
 
@@ -259,9 +268,10 @@ class PterodactylV2 extends Server
                 'name' => 'location_ids',
                 'label' => 'Location(s)',
                 'type' => 'select',
-                'description' => 'Target location(s) where the server container will be deployed.',
+                'description' => 'Target location(s) where the server container will be deployed. Leave unselected for automatic placement across all locations.',
                 'options' => $locationList,
                 'multiple' => true,
+                'searchable' => true,
                 'database_type' => 'array',
                 'required' => false,
             ],
@@ -423,7 +433,7 @@ class PterodactylV2 extends Server
      */
     public function createServer(Service $service, $settings, $properties): array
     {
-        $client = $this->getClient();
+        $client = $this->getClient($service);
         $versionMode = (string) ($this->config('version_mode') ?? 'auto');
 
         return ProvisioningService::createServer($service, $settings, $properties, $client, $versionMode);
@@ -434,7 +444,7 @@ class PterodactylV2 extends Server
      */
     public function suspendServer(Service $service, $settings, $properties): bool
     {
-        $client = $this->getClient();
+        $client = $this->getClient($service);
         return LifecycleService::suspend($service, $client);
     }
 
@@ -443,7 +453,7 @@ class PterodactylV2 extends Server
      */
     public function unsuspendServer(Service $service, $settings, $properties): bool
     {
-        $client = $this->getClient();
+        $client = $this->getClient($service);
         return LifecycleService::unsuspend($service, $client);
     }
 
@@ -452,7 +462,7 @@ class PterodactylV2 extends Server
      */
     public function terminateServer(Service $service, $settings, $properties): bool
     {
-        $client = $this->getClient();
+        $client = $this->getClient($service);
         return LifecycleService::terminate($service, $client);
     }
 
@@ -461,7 +471,7 @@ class PterodactylV2 extends Server
      */
     public function upgradeServer(Service $service, $settings, $properties): bool
     {
-        $client = $this->getClient();
+        $client = $this->getClient($service);
         $versionMode = (string) ($this->config('version_mode') ?? 'auto');
 
         return LifecycleService::upgrade($service, $settings, $properties, $client, $versionMode);
@@ -472,7 +482,7 @@ class PterodactylV2 extends Server
      */
     public function getActions(Service $service): array
     {
-        $client = $this->getClient();
+        $client = $this->getClient($service);
         $server = ServerResolver::resolve($service, $client, failIfNotFound: false);
 
         $actions = [

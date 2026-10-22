@@ -86,7 +86,9 @@ class EditProduct extends EditRecord
     protected function mutateFormDataBeforeFill(array $data): array
     {
         foreach ($this->record->settings as $setting) {
-            $data['settings'][$setting->key] = $setting->value;
+            $data['settings'][$setting->key] = $setting->type === 'array' && is_string($setting->value)
+                ? (json_decode($setting->value, true) ?? [])
+                : $setting->value;
         }
 
         return $data;

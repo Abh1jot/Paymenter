@@ -27,26 +27,11 @@ class ServerResolver
     public static function resolve(Service $service, PterodactylClient $client, bool $failIfNotFound = true): ?ServerDetails
     {
         $properties = $service->properties->pluck('value', 'key')->toArray();
+        $serviceExternalId = (string) $service->id;
 
-        // Strategy 1: Stored numeric server ID
-        $storedServerId = $properties['ptero_server_id'] ?? $properties['server_id'] ?? null;
-        if ($storedServerId && is_numeric($storedServerId)) {
-            try {
-                $response = $client->appRequest("servers/{$storedServerId}?include=allocations,node");
-                if (isset($response['attributes']['id'])) {
-                    $server = ServerDetails::fromApiResponse($response, $client->getHost());
-                    self::syncProperties($service, $server);
-                    return $server;
-                }
-            } catch (Exception $e) {
-                // If the stored ID failed, fall through to external_id check
-            }
-        }
-
-        // Strategy 2: External ID matching Paymenter Service ID (Used by EasyPtroClient and stock Pterodactyl)
-        $externalId = (string) $service->id;
+        // Strategy 1: External ID matching Paymenter Service ID (The canonical, unambiguous mapping)
         try {
-            $response = $client->appRequest("servers/external/{$externalId}?include=allocations,node");
+            $response = $client->appRequest("servers/external/{$serviceExternalId}?include=allocations,node");
             if (isset($response['attributes']['id'])) {
                 $server = ServerDetails::fromApiResponse($response, $client->getHost());
                 self::syncProperties($service, $server);
@@ -56,19 +41,47 @@ class ServerResolver
             // Not found by external ID
         }
 
-        // Strategy 3: Stored UUID or identifier
+        // Strategy 2: Stored numeric server ID (with verification)
+        $storedServerId = $properties['ptero_server_id'] ?? $properties['server_id'] ?? null;
+        if ($storedServerId && is_numeric($storedServerId)) {
+            try {
+                $response = $client->appRequest("servers/{$storedServerId}?include=allocations,node");
+                if (isset($response['attributes']['id'])) {
+                    $remoteExternalId = (string) ($response['attributes']['external_id'] ?? '');
+                    // Only match if remote external_id is empty or matches this service ID
+                    if (empty($remoteExternalId) || $remoteExternalId === $serviceExternalId) {
+                        $server = ServerDetails::fromApiResponse($response, $client->getHost());
+                        self::syncProperties($service, $server);
+                        return $server;
+                    } else {
+                        // Stale property pointing to a completely different server! Purge it.
+                        $service->properties()->whereIn('key', ['ptero_server_id', 'server_id', 'ptero_identifier', 'ptero_server_uuid'])->delete();
+                    }
+                }
+            } catch (Exception $e) {
+                // If stored ID not found on panel, fall through
+            }
+        }
+
+        // Strategy 3: Stored short identifier or UUID (with exact matching)
         $storedIdentifier = $properties['ptero_identifier'] ?? $properties['identifier'] ?? null;
         $storedUuid = $properties['ptero_server_uuid'] ?? $properties['server_uuid'] ?? null;
         $identifierToSearch = $storedIdentifier ?: $storedUuid;
 
         if ($identifierToSearch) {
             try {
-                // Search via server listing filter or external lookup
-                $response = $client->appRequest("servers?filter[identifier]={$identifierToSearch}&include=allocations,node");
-                if (!empty($response['data'][0]['attributes']['id'])) {
-                    $server = ServerDetails::fromApiResponse($response['data'][0], $client->getHost());
-                    self::syncProperties($service, $server);
-                    return $server;
+                $response = $client->appRequest("servers?include=allocations,node");
+                $serversList = $response['data'] ?? [];
+                foreach ($serversList as $item) {
+                    $attr = $item['attributes'] ?? [];
+                    if (($attr['identifier'] ?? '') === $identifierToSearch || ($attr['uuid'] ?? '') === $identifierToSearch) {
+                        $remoteExternalId = (string) ($attr['external_id'] ?? '');
+                        if (empty($remoteExternalId) || $remoteExternalId === $serviceExternalId) {
+                            $server = ServerDetails::fromApiResponse($item, $client->getHost());
+                            self::syncProperties($service, $server);
+                            return $server;
+                        }
+                    }
                 }
             } catch (Exception $e) {
                 // Ignore

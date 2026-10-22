@@ -165,16 +165,17 @@ class PterodactylV2FeatureTest extends TestCase
             ], 200),
         ]);
 
-        $this->expectException(Exception::class);
-        $this->expectExceptionMessage('Pterodactyl server already exists for Service #99');
-
-        ProvisioningService::createServer(
+        $result = ProvisioningService::createServer(
             $service,
             ['egg_id' => 1, 'memory' => 1024, 'disk' => 5120],
             [],
             $this->client,
             'v2'
         );
+
+        $this->assertEquals(777, $result['server']);
+        $this->assertEquals('exist999', $result['identifier']);
+        $this->assertEquals('existing-uuid', $result['uuid']);
     }
 
     public function test_provisioning_creates_new_server_with_v2_eggs_and_external_id(): void

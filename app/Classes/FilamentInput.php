@@ -81,6 +81,8 @@ class FilamentInput
                     })
                     ->preload()
                     ->multiple($setting->multiple ?? false)
+                    ->searchable($setting->searchable ?? false)
+                    ->native(false)
                     ->required($setting->required ?? false)
                     ->hint($setting->hint ?? null)
                     ->hintColor('primary')

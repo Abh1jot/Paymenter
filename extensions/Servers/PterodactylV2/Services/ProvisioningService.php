@@ -25,10 +25,15 @@ class ProvisioningService
         PterodactylClient $client,
         string $configuredVersion = 'auto'
     ): array {
-        // Idempotency check: Never recreate or duplicate an existing server!
+        // Idempotency check: If server already exists on Pterodactyl, return existing server to prevent duplicate creation
         $existing = ServerResolver::resolve($service, $client, failIfNotFound: false);
         if ($existing) {
-            throw new Exception("Pterodactyl server already exists for Service #{$service->id} (Server ID: {$existing->id}). Skipping provisioning to prevent duplicate servers.");
+            return [
+                'server' => $existing->id,
+                'identifier' => $existing->identifier,
+                'uuid' => $existing->uuid,
+                'link' => $existing->panelUrl,
+            ];
         }
 
         $mergedSettings = array_merge($settings, $properties);
@@ -46,6 +51,18 @@ class ProvisioningService
             if ($envVar) {
                 $environment[$envVar] = $mergedSettings[$envVar] ?? $vAttr['default_value'] ?? '';
             }
+        }
+
+        // Automatic fallback for common egg variables if not returned in relationships
+        $startupStr = $eggAttributes['startup'] ?? '';
+        if (!isset($environment['SERVER_JARFILE']) && str_contains($startupStr, 'SERVER_JARFILE')) {
+            $environment['SERVER_JARFILE'] = $mergedSettings['SERVER_JARFILE'] ?? 'server.jar';
+        }
+        if (!isset($environment['BUILD_NUMBER']) && str_contains($startupStr, 'BUILD_NUMBER')) {
+            $environment['BUILD_NUMBER'] = $mergedSettings['BUILD_NUMBER'] ?? 'latest';
+        }
+        if (!isset($environment['MINECRAFT_VERSION']) && str_contains($startupStr, 'MINECRAFT_VERSION')) {
+            $environment['MINECRAFT_VERSION'] = $mergedSettings['MINECRAFT_VERSION'] ?? 'latest';
         }
 
         // 2. Resolve or create user on Pterodactyl
@@ -124,24 +141,38 @@ class ProvisioningService
      */
     protected static function resolveEggData(PterodactylClient $client, array $settings, string $version): array
     {
-        $eggId = $settings['egg_id'] ?? null;
+        $eggId = (int) ($settings['egg_id'] ?? 0);
         $nestId = $settings['nest_id'] ?? null;
 
         if (!$eggId) {
             throw new Exception('Product configuration is missing required egg_id.');
         }
 
-        // Attempt 1: Direct endpoint (Standard for Panel 2.0)
+        // Strategy 1: Fetch from eggs list with include=variables (standard in Panel 2.0 to obtain variable definitions)
+        try {
+            $allEggs = $client->appRequest('eggs?include=variables');
+            if (!empty($allEggs['data']) && is_array($allEggs['data'])) {
+                foreach ($allEggs['data'] as $eggItem) {
+                    if ((int) ($eggItem['attributes']['id'] ?? 0) === $eggId) {
+                        return $eggItem;
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            // Fall through
+        }
+
+        // Strategy 2: Direct single egg endpoint
         try {
             $data = $client->appRequest("eggs/{$eggId}?include=variables");
             if (isset($data['attributes'])) {
                 return $data;
             }
         } catch (Exception $e) {
-            // If v2 direct failed or returned 404, fall through to nested endpoint
+            // Fall through
         }
 
-        // Attempt 2: Nested endpoint (Standard for Panel 1.x)
+        // Strategy 3: Nested endpoint (Standard for Panel 1.x)
         if ($nestId) {
             $data = $client->appRequest("nests/{$nestId}/eggs/{$eggId}?include=variables");
             if (isset($data['attributes'])) {
