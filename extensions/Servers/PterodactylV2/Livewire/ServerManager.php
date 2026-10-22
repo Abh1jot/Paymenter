@@ -170,6 +170,7 @@ class ServerManager extends Component
      */
     public function togglePassword(): void
     {
+        $this->authorizeServiceAccess();
         $this->showPassword = !$this->showPassword;
     }
 

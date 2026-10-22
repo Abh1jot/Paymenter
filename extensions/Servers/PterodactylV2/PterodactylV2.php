@@ -108,7 +108,13 @@ class PterodactylV2 extends Server
 
             $ssoData = $ssoResponse->json();
             if (is_array($ssoData) && ($ssoData['success'] ?? false) === true && !empty($ssoData['redirect'])) {
-                return redirect()->away($ssoData['redirect']);
+                $redirectUrl = (string) $ssoData['redirect'];
+                // Prevent open redirect vulnerabilities by strictly verifying host ownership
+                if (str_starts_with($redirectUrl, '/') || str_starts_with($redirectUrl, $baseHost)) {
+                    return redirect()->away(str_starts_with($redirectUrl, '/') ? $baseHost . $redirectUrl : $redirectUrl);
+                }
+
+                abort(403, 'Invalid SSO redirect target domain.');
             }
 
             $errMsg = is_array($ssoData) ? ($ssoData['message'] ?? 'SSO authentication failed.') : 'SSO authentication failed.';
