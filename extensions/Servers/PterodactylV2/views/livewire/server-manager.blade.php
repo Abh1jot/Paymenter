@@ -41,23 +41,23 @@
                 </div>
             </div>
 
-            <div class="flex items-center gap-2.5">
+            <div class="flex items-center gap-2.5 shrink-0">
                 {{-- Status Badge --}}
-                <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold
+                <div class="inline-flex items-center justify-center gap-2 h-9 px-3 rounded-lg border text-xs font-semibold leading-none shrink-0
                     @if($currentState === 'active' || $currentState === 'running') bg-emerald-500/10 text-emerald-400 border-emerald-500/30
                     @elseif($currentState === 'suspended') bg-amber-500/10 text-amber-400 border-amber-500/30
                     @elseif($currentState === 'installing') bg-blue-500/10 text-blue-400 border-blue-500/30
                     @else bg-neutral-500/10 text-neutral-400 border-neutral-500/30 @endif">
-                    <span class="size-2 rounded-full @if($currentState === 'active' || $currentState === 'running') bg-emerald-400 animate-pulse @elseif($currentState === 'suspended') bg-amber-400 @else bg-blue-400 @endif"></span>
-                    <span class="capitalize">{{ $currentState }}</span>
+                    <span class="size-2 rounded-full shrink-0 @if($currentState === 'active' || $currentState === 'running') bg-emerald-400 animate-pulse @elseif($currentState === 'suspended') bg-amber-400 @else bg-blue-400 @endif"></span>
+                    <span class="capitalize leading-none">{{ $currentState }}</span>
                 </div>
 
                 {{-- Direct Link to Server in Panel --}}
                 @if($panelUrl)
                     <a href="{{ $panelUrl }}" target="_blank" rel="noopener noreferrer"
-                       class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-xs font-semibold shadow-sm transition-all">
-                        <span>Open Panel</span>
-                        <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       class="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-lg bg-primary hover:bg-primary/90 text-white border border-transparent text-xs font-semibold leading-none shadow-sm transition-all shrink-0">
+                        <span class="leading-none">Open Panel</span>
+                        <svg class="size-3.5 shrink-0 text-white/90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
                         </svg>
                     </a>
@@ -152,20 +152,23 @@
                 </div>
             </div>
 
-            <div class="flex items-center gap-2 self-start md:self-auto shrink-0">
+            <div class="flex items-center gap-2.5 self-start md:self-auto shrink-0">
                 @if($resetPasswordUrl)
                     <a href="{{ $resetPasswordUrl }}" target="_blank" rel="noopener noreferrer"
-                       class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-neutral-800 hover:bg-neutral-700 text-white border border-neutral-700 transition-all">
-                        <span>Reset Password</span>
-                        <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       class="inline-flex items-center justify-center gap-2 h-9 px-4 rounded-lg text-xs font-semibold leading-none bg-neutral-800/90 hover:bg-neutral-700 text-neutral-200 hover:text-white border border-neutral-700/80 shadow-sm transition-all shrink-0">
+                        <span class="leading-none">Reset Password</span>
+                        <svg class="size-3.5 shrink-0 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
                         </svg>
                     </a>
                 @endif
                 @if($panelUrl)
                     <a href="{{ $panelUrl }}" target="_blank" rel="noopener noreferrer"
-                       class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-primary hover:bg-primary/90 text-white shadow-sm transition-all">
-                        <span>Go to Server →</span>
+                       class="inline-flex items-center justify-center gap-2 h-9 px-4 rounded-lg text-xs font-semibold leading-none bg-primary hover:bg-primary/90 text-white border border-transparent shadow-sm transition-all shrink-0">
+                        <span class="leading-none">Go to Server</span>
+                        <svg class="size-3.5 shrink-0 text-white/90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+                        </svg>
                     </a>
                 @endif
             </div>
