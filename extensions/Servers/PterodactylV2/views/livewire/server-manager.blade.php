@@ -65,24 +65,8 @@
             </div>
         </div>
 
-        {{-- Clean Grid: Connection & Account Details --}}
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {{-- Server Address (IP:Port) --}}
-            <div class="p-3.5 rounded-xl bg-background/50 border border-neutral/30 flex flex-col justify-between">
-                <span class="text-[11px] font-medium text-color-muted uppercase tracking-wider">Server Address (IP:Port)</span>
-                <div class="flex items-center justify-between gap-2 mt-1.5">
-                    <span class="font-mono text-sm font-semibold text-color-base truncate">{{ $credentials['connection'] ?? 'Pending Allocation' }}</span>
-                    @if(!empty($credentials['connection']) && $credentials['connection'] !== 'Pending Allocation')
-                        <button onclick="navigator.clipboard.writeText('{{ $credentials['connection'] }}'); window.Alpine?.store('notifications')?.addNotification([{message: 'Address copied!', type: 'success'}])"
-                                title="Copy Address" class="text-color-muted hover:text-color-base p-1 transition-colors">
-                            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-                            </svg>
-                        </button>
-                    @endif
-                </div>
-            </div>
-
+        {{-- Clean Grid: Node & Account Details --}}
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {{-- Node / Location --}}
             <div class="p-3.5 rounded-xl bg-background/50 border border-neutral/30 flex flex-col justify-between">
                 <span class="text-[11px] font-medium text-color-muted uppercase tracking-wider">Node / Location</span>
