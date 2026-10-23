@@ -120,7 +120,7 @@ class PasswordResetTest extends TestCase
         ]);
     }
 
-    public function test_cant_request_password_reset_link_for_admin_user()
+    public function test_can_request_password_reset_link_for_admin_user()
     {
         $user = User::factory()->create([
             'email' => 'admin@example.com',
@@ -132,8 +132,8 @@ class PasswordResetTest extends TestCase
             ->assertHasNoErrors()
             ->assertDispatched('notify');
 
-        $this->assertDatabaseCount('password_reset_tokens', 0);
-        $this->assertDatabaseMissing('password_reset_tokens', [
+        $this->assertDatabaseCount('password_reset_tokens', 1);
+        $this->assertDatabaseHas('password_reset_tokens', [
             'email' => 'admin@example.com',
         ]);
     }
