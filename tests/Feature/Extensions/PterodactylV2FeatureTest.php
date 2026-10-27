@@ -491,4 +491,308 @@ class PterodactylV2FeatureTest extends TestCase
             ->expectsOutputToContain('4567')
             ->assertExitCode(0);
     }
+
+    public function test_provisioning_handles_case_insensitive_and_display_name_egg_variables(): void
+    {
+        $user = User::factory()->create(['email' => 'vars@test.com']);
+        $product = $this->createProduct()->product;
+        $service = Service::factory()->create([
+            'id' => 201,
+            'user_id' => $user->id,
+            'product_id' => $product->id,
+            'status' => Service::STATUS_PENDING,
+        ]);
+
+        $capturedPayload = null;
+
+        Http::fake([
+            'https://panel.test/api/application/servers/external/201*' => Http::response([], 404),
+            'https://panel.test/api/application/eggs/1*' => Http::response([
+                'attributes' => [
+                    'id' => 1,
+                    'name' => 'Paper',
+                    'docker_image' => 'ghcr.io/pterodactyl/yolks:java_21',
+                    'startup' => 'java -jar {{SERVER_JARFILE}}',
+                    'relationships' => [
+                        'variables' => [
+                            'data' => [
+                                [
+                                    'attributes' => [
+                                        'name' => 'Server Jar File',
+                                        'env_variable' => 'SERVER_JARFILE',
+                                        'default_value' => 'server.jar',
+                                        'rules' => 'required|string',
+                                    ],
+                                ],
+                                [
+                                    'attributes' => [
+                                        'name' => 'Build Number',
+                                        'env_variable' => 'BUILD_NUMBER',
+                                        'default_value' => '',
+                                        'rules' => 'required|string',
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+            'https://panel.test/api/application/users*' => Http::response([
+                'data' => [
+                    ['attributes' => ['id' => 50, 'email' => 'vars@test.com']],
+                ],
+            ], 200),
+            'https://panel.test/api/application/servers' => function ($request) use (&$capturedPayload) {
+                $capturedPayload = $request->data();
+                return Http::response([
+                    'attributes' => [
+                        'id' => 901,
+                        'external_id' => '201',
+                        'identifier' => 'var901',
+                        'uuid' => 'uuid-var-901',
+                    ],
+                ], 201);
+            },
+        ]);
+
+        // Merged settings has lowercase 'build_number' and spaced 'Server Jar File'
+        $settings = [
+            'egg_id' => 1,
+            'location_ids' => [1],
+            'memory' => 1024,
+            'disk' => 2048,
+            'build_number' => '456',
+            'Server Jar File' => 'custom-paper.jar',
+        ];
+
+        $res = ProvisioningService::createServer($service, $settings, [], $this->client, 'v2');
+
+        $this->assertEquals(901, $res['server']);
+        $this->assertNotNull($capturedPayload);
+        $this->assertEquals('custom-paper.jar', $capturedPayload['environment']['SERVER_JARFILE']);
+        $this->assertEquals('456', $capturedPayload['environment']['BUILD_NUMBER']);
+    }
+
+    public function test_provisioning_supplies_safe_defaults_when_required_variable_is_empty(): void
+    {
+        $user = User::factory()->create(['email' => 'defaults@test.com']);
+        $product = $this->createProduct()->product;
+        $service = Service::factory()->create([
+            'id' => 202,
+            'user_id' => $user->id,
+            'product_id' => $product->id,
+            'status' => Service::STATUS_PENDING,
+        ]);
+
+        $capturedPayload = null;
+
+        Http::fake([
+            'https://panel.test/api/application/servers/external/202*' => Http::response([], 404),
+            'https://panel.test/api/application/eggs/1*' => Http::response([
+                'attributes' => [
+                    'id' => 1,
+                    'name' => 'Paper',
+                    'docker_image' => 'ghcr.io/pterodactyl/yolks:java_21',
+                    'startup' => 'java -jar {{SERVER_JARFILE}}',
+                    'relationships' => [
+                        'variables' => [
+                            'data' => [
+                                [
+                                    'attributes' => [
+                                        'name' => 'Server Jar File',
+                                        'env_variable' => 'SERVER_JARFILE',
+                                        'default_value' => '',
+                                        'rules' => 'required|string',
+                                    ],
+                                ],
+                                [
+                                    'attributes' => [
+                                        'name' => 'Build Number',
+                                        'env_variable' => 'BUILD_NUMBER',
+                                        'default_value' => null,
+                                        'rules' => 'required|string',
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+            'https://panel.test/api/application/users*' => Http::response([
+                'data' => [
+                    ['attributes' => ['id' => 51, 'email' => 'defaults@test.com']],
+                ],
+            ], 200),
+            'https://panel.test/api/application/servers' => function ($request) use (&$capturedPayload) {
+                $capturedPayload = $request->data();
+                return Http::response([
+                    'attributes' => [
+                        'id' => 902,
+                        'external_id' => '202',
+                        'identifier' => 'def902',
+                        'uuid' => 'uuid-def-902',
+                    ],
+                ], 201);
+            },
+        ]);
+
+        // Neither admin nor customer provided values for required fields
+        $settings = [
+            'egg_id' => 1,
+            'location_ids' => [1],
+            'memory' => 1024,
+            'disk' => 2048,
+        ];
+
+        $res = ProvisioningService::createServer($service, $settings, [], $this->client, 'v2');
+
+        $this->assertEquals(902, $res['server']);
+        $this->assertNotNull($capturedPayload);
+        // Verify intelligent defaults were automatically provided to avoid 422 validation failure
+        $this->assertEquals('server.jar', $capturedPayload['environment']['SERVER_JARFILE']);
+        $this->assertEquals('latest', $capturedPayload['environment']['BUILD_NUMBER']);
+    }
+
+    public function test_provisioning_handles_email_already_taken_conflict(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'existing_user@test.com',
+            'first_name' => 'Existing',
+            'last_name' => 'User',
+        ]);
+        $product = $this->createProduct()->product;
+        $service = Service::factory()->create([
+            'id' => 203,
+            'user_id' => $user->id,
+            'product_id' => $product->id,
+            'status' => Service::STATUS_PENDING,
+        ]);
+
+        $userLookupAttempted = false;
+
+        Http::fake([
+            'https://panel.test/api/application/servers/external/203*' => Http::response([], 404),
+            'https://panel.test/api/application/eggs/1*' => Http::response([
+                'attributes' => [
+                    'id' => 1,
+                    'docker_image' => 'ghcr.io/pterodactyl/yolks:java_17',
+                    'startup' => 'java -jar server.jar',
+                    'relationships' => ['variables' => ['data' => []]],
+                ],
+            ], 200),
+            // User creation throws email taken error, then pagination or search finds user
+            'https://panel.test/api/application/users*' => function ($request) {
+                if ($request->method() === 'POST') {
+                    return Http::response([
+                        'errors' => [
+                            [
+                                'code' => 'ValidationHttpException',
+                                'detail' => 'The email has already been taken.',
+                                'status' => '422',
+                            ],
+                        ],
+                    ], 422);
+                }
+                if (str_contains($request->url(), 'filter')) {
+                    return Http::response(['data' => []], 200);
+                }
+                // GET request for search / pagination lookup
+                return Http::response([
+                    'data' => [
+                        [
+                            'attributes' => [
+                                'id' => 888,
+                                'email' => 'existing_user@test.com',
+                            ],
+                        ],
+                    ],
+                ], 200);
+            },
+            'https://panel.test/api/application/servers' => Http::response([
+                'attributes' => [
+                    'id' => 903,
+                    'external_id' => '203',
+                    'identifier' => 'usr903',
+                    'uuid' => 'uuid-usr-903',
+                ],
+            ], 201),
+        ]);
+
+        $res = ProvisioningService::createServer($service, [
+            'egg_id' => 1,
+            'location_ids' => [1],
+            'memory' => 1024,
+            'disk' => 2048,
+        ], [], $this->client, 'v2');
+
+        $this->assertEquals(903, $res['server']);
+    }
+
+    public function test_provisioning_handles_external_id_collision_on_retry(): void
+    {
+        $user = User::factory()->create(['email' => 'retry@test.com']);
+        $product = $this->createProduct()->product;
+        $service = Service::factory()->create([
+            'id' => 204,
+            'user_id' => $user->id,
+            'product_id' => $product->id,
+            'status' => Service::STATUS_PENDING,
+        ]);
+
+        $serverPostCalled = false;
+
+        Http::fake([
+            // Initial check before POST: simulates race condition where initial check returned 404
+            'https://panel.test/api/application/servers/external/204*' => function () use (&$serverPostCalled) {
+                if (!$serverPostCalled) {
+                    return Http::response([], 404);
+                }
+                return Http::response([
+                    'attributes' => [
+                        'id' => 904,
+                        'external_id' => '204',
+                        'identifier' => 'rtr904',
+                        'uuid' => 'uuid-rtr-904',
+                    ],
+                ], 200);
+            },
+            'https://panel.test/api/application/eggs/1*' => Http::response([
+                'attributes' => [
+                    'id' => 1,
+                    'docker_image' => 'ghcr.io/pterodactyl/yolks:java_17',
+                    'startup' => 'java -jar server.jar',
+                    'relationships' => ['variables' => ['data' => []]],
+                ],
+            ], 200),
+            'https://panel.test/api/application/users*' => Http::response([
+                'data' => [
+                    ['attributes' => ['id' => 52, 'email' => 'retry@test.com']],
+                ],
+            ], 200),
+            // Server creation returns 422 external id already taken
+            'https://panel.test/api/application/servers' => function () use (&$serverPostCalled) {
+                $serverPostCalled = true;
+                return Http::response([
+                    'errors' => [
+                        [
+                            'code' => 'ValidationHttpException',
+                            'detail' => 'The external id has already been taken.',
+                            'status' => '422',
+                        ],
+                    ],
+                ], 422);
+            },
+        ]);
+
+        $res = ProvisioningService::createServer($service, [
+            'egg_id' => 1,
+            'location_ids' => [1],
+            'memory' => 1024,
+            'disk' => 2048,
+        ], [], $this->client, 'v2');
+
+        $this->assertEquals(904, $res['server']);
+        $this->assertEquals('rtr904', $res['identifier']);
+    }
 }
+

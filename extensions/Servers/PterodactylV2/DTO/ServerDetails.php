@@ -19,6 +19,7 @@ class ServerDetails
         public ?string $nodeName,
         public ?string $ip,
         public ?int $port,
+        public ?int $allocationId = null,
         public array $allocations = [],
         public int $memoryLimit = 0,
         public int $swapLimit = 0,
@@ -81,6 +82,12 @@ class ServerDetails
         $panelHost = rtrim($panelHost, '/');
         $panelUrl = $panelHost ? "{$panelHost}/server/{$identifier}" : '';
 
+        // Primary Allocation ID
+        $primaryAllocId = isset($attributes['allocation']) && is_numeric($attributes['allocation']) ? (int) $attributes['allocation'] : null;
+        if (!$primaryAllocId && !empty($allocations[0]['id'])) {
+            $primaryAllocId = (int) $allocations[0]['id'];
+        }
+
         return new self(
             id: (int) ($attributes['id'] ?? 0),
             uuid: (string) ($attributes['uuid'] ?? ''),
@@ -92,6 +99,7 @@ class ServerDetails
             nodeName: $nodeName,
             ip: $primaryIp,
             port: $primaryPort ? (int) $primaryPort : null,
+            allocationId: $primaryAllocId,
             allocations: $allocations,
             memoryLimit: (int) ($limits['memory'] ?? 0),
             swapLimit: (int) ($limits['swap'] ?? 0),

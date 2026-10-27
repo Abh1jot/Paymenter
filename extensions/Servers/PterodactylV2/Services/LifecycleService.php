@@ -103,8 +103,8 @@ class LifecycleService
         $version = PanelVersionDetector::detect($client, $configuredVersion);
 
         // 1. Update Build Configuration (limits & feature limits)
+        $defaultAllocationId = $server->allocationId ?? $server->raw['allocation'] ?? null;
         $updateBuildData = [
-            'allocation' => $server->raw['allocation'] ?? $server->port,
             'memory' => (int) ($mergedSettings['memory'] ?? $server->memoryLimit),
             'swap' => (int) ($mergedSettings['swap'] ?? $server->swapLimit),
             'disk' => (int) ($mergedSettings['disk'] ?? $server->diskLimit),
@@ -117,6 +117,10 @@ class LifecycleService
                 'backups' => (int) ($mergedSettings['backups'] ?? $server->backupsLimit),
             ],
         ];
+
+        if ($defaultAllocationId && is_numeric($defaultAllocationId)) {
+            $updateBuildData['allocation'] = (int) $defaultAllocationId;
+        }
 
         $client->appRequest("servers/{$server->id}/build", 'PATCH', $updateBuildData);
 
