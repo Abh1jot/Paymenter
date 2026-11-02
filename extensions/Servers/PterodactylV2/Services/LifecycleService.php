@@ -4,6 +4,8 @@ namespace Paymenter\Extensions\Servers\PterodactylV2\Services;
 
 use App\Models\Service;
 use Exception;
+use Illuminate\Support\Facades\Log;
+use Paymenter\Extensions\Servers\PterodactylV2\DTO\ServerDetails;
 
 /**
  * Service to manage service lifecycle operations:
@@ -21,15 +23,30 @@ class LifecycleService
      */
     public static function suspend(Service $service, PterodactylClient $client): bool
     {
-        $server = ServerResolver::resolve($service, $client, failIfNotFound: true);
+        $server = ServerResolver::resolve($service, $client, failIfNotFound: false);
+        if (!$server) {
+            return false;
+        }
+
         try {
             $client->appRequest("servers/{$server->id}/suspend", 'POST');
         } catch (Exception $e) {
-            if (str_contains(strtolower($e->getMessage()), 'already suspended') || str_contains(strtolower($e->getMessage()), 'suspended')) {
-                return true;
+            $msg = strtolower($e->getMessage());
+            if (!str_contains($msg, 'already suspended') && !str_contains($msg, 'is suspended')) {
+                throw $e;
             }
-            throw $e;
         }
+
+        // Sync suspension state with panel extension if installed
+        try {
+            $client->appRequest('extensions/server-suspension/action', 'POST', [
+                'server_id' => (int) $server->id,
+                'action' => 'suspend',
+            ]);
+        } catch (\Throwable $e) {
+            // Ignore if extension is not installed
+        }
+
         return true;
     }
 
@@ -40,16 +57,68 @@ class LifecycleService
      */
     public static function unsuspend(Service $service, PterodactylClient $client): bool
     {
-        $server = ServerResolver::resolve($service, $client, failIfNotFound: true);
+        $server = ServerResolver::resolve($service, $client, failIfNotFound: false);
+        if (!$server) {
+            Log::warning("PterodactylV2: Could not resolve server for Service #{$service->id} during unsuspend.");
+            return false;
+        }
+
+        // 1. Unsuspend on Pterodactyl core Application API
         try {
             $client->appRequest("servers/{$server->id}/unsuspend", 'POST');
         } catch (Exception $e) {
-            if (str_contains(strtolower($e->getMessage()), 'not suspended') || str_contains(strtolower($e->getMessage()), 'already active')) {
-                return true;
+            $msg = strtolower($e->getMessage());
+            if (!str_contains($msg, 'not suspended') 
+                && !str_contains($msg, 'already active') 
+                && !str_contains($msg, 'cannot unsuspend')
+                && !str_contains($msg, 'is not suspended')
+                && !str_contains($msg, 'already unsuspended')) {
+                Log::warning("PterodactylV2 unsuspend API call for server #{$server->id} returned: " . $e->getMessage());
             }
-            throw $e;
         }
+
+        // 2. Synchronize suspension schedule with Pterodactyl extensions (e.g. pteroext-server-suspension / autosuspend)
+        // This ensures the panel's automated 1-minute cron does not immediately re-suspend the server.
+        self::syncSuspensionSchedule($service, $server, $client);
+
         return true;
+    }
+
+    /**
+     * Synchronize extended date and active state with Pterodactyl suspension extensions.
+     */
+    public static function syncSuspensionSchedule(Service $service, ServerDetails $server, PterodactylClient $client): void
+    {
+        $expiryDate = $service->expires_at;
+        $dateStr = ($expiryDate && $expiryDate->isFuture()) ? $expiryDate->format('Y-m-d H:i:s') : null;
+
+        // 1. Call pteroext-server-suspension extension if available on panel
+        try {
+            $client->appRequest('extensions/server-suspension/action', 'POST', [
+                'server_id' => (int) $server->id,
+                'action' => 'unsuspend',
+            ]);
+        } catch (\Throwable $e) {}
+
+        if ($dateStr) {
+            try {
+                $client->appRequest('extensions/server-suspension/schedule', 'POST', [
+                    'server_id' => (int) $server->id,
+                    'suspension_date' => $dateStr,
+                    'status' => 'active',
+                    'notify_user' => true,
+                ]);
+            } catch (\Throwable $e) {}
+        }
+
+        // 2. Call legacy autosuspend blueprint extension if available on panel
+        if ($dateStr) {
+            try {
+                $client->appRequest("extensions/autosuspend/{$server->id}", 'PATCH', [
+                    'suspension_date' => $dateStr,
+                ]);
+            } catch (\Throwable $e) {}
+        }
     }
 
     /**

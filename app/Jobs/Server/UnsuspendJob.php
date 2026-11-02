@@ -31,10 +31,16 @@ class UnsuspendJob implements ShouldQueue
     {
         try {
             ExtensionHelper::unsuspendServer($this->service);
-        } catch (Exception $e) {
-            if ($e->getMessage() !== 'No server assigned to this product') {
-                throw $e;
+        } catch (\Throwable $e) {
+            $msg = strtolower($e->getMessage());
+            if ($msg === 'no server assigned to this product'
+                || str_contains($msg, 'not suspended')
+                || str_contains($msg, 'already active')
+                || str_contains($msg, 'cannot unsuspend')
+                || str_contains($msg, 'already unsuspended')) {
+                return;
             }
+            throw $e;
         }
     }
 }

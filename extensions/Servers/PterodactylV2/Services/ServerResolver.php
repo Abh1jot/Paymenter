@@ -47,15 +47,17 @@ class ServerResolver
             try {
                 $response = $client->appRequest("servers/{$storedServerId}?include=allocations,node");
                 if (isset($response['attributes']['id'])) {
-                    $remoteExternalId = (string) ($response['attributes']['external_id'] ?? '');
-                    // Only match if remote external_id is empty or matches this service ID
-                    if (empty($remoteExternalId) || $remoteExternalId === $serviceExternalId) {
+                    $remoteExternalId = trim((string) ($response['attributes']['external_id'] ?? ''));
+                    // Accept if external_id is empty, matches service ID, or formatted as service prefix
+                    $isMatch = empty($remoteExternalId)
+                        || $remoteExternalId === $serviceExternalId
+                        || str_ends_with($remoteExternalId, '-' . $serviceExternalId)
+                        || str_ends_with($remoteExternalId, '_' . $serviceExternalId);
+
+                    if ($isMatch) {
                         $server = ServerDetails::fromApiResponse($response, $client->getHost());
                         self::syncProperties($service, $server);
                         return $server;
-                    } else {
-                        // Stale property pointing to a completely different server! Purge it.
-                        $service->properties()->whereIn('key', ['ptero_server_id', 'server_id', 'ptero_identifier', 'ptero_server_uuid'])->delete();
                     }
                 }
             } catch (Exception $e) {
@@ -75,8 +77,8 @@ class ServerResolver
                 foreach ($serversList as $item) {
                     $attr = $item['attributes'] ?? [];
                     if (($attr['identifier'] ?? '') === $identifierToSearch || ($attr['uuid'] ?? '') === $identifierToSearch) {
-                        $remoteExternalId = (string) ($attr['external_id'] ?? '');
-                        if (empty($remoteExternalId) || $remoteExternalId === $serviceExternalId) {
+                        $remoteExternalId = trim((string) ($attr['external_id'] ?? ''));
+                        if (empty($remoteExternalId) || $remoteExternalId === $serviceExternalId || str_ends_with($remoteExternalId, '-' . $serviceExternalId)) {
                             $server = ServerDetails::fromApiResponse($item, $client->getHost());
                             self::syncProperties($service, $server);
                             return $server;
@@ -118,23 +120,12 @@ class ServerResolver
             ['value' => $server->identifier]
         );
 
-        // Also maintain legacy server_id for backward compatibility
-        $service->properties()->updateOrCreate(
-            ['key' => 'server_id'],
-            ['value' => (string) $server->id]
-        );
-    }
-
-    /**
-     * Check if a service has a known, valid association without making remote network calls if already cached.
-     */
-    public static function hasStoredMapping(Service $service): bool
-    {
-        $properties = $service->properties->pluck('value', 'key')->toArray();
-
-        return !empty($properties['ptero_server_id'])
-            || !empty($properties['server_id'])
-            || !empty($properties['ptero_server_uuid'])
-            || !empty($properties['ptero_identifier']);
+        // Also synchronize legacy keys if not present
+        if (!$service->properties()->where('key', 'server_id')->exists()) {
+            $service->properties()->create([
+                'key' => 'server_id',
+                'value' => (string) $server->id,
+            ]);
+        }
     }
 }

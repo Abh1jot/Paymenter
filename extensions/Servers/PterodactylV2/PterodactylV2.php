@@ -39,6 +39,26 @@ class PterodactylV2 extends Server
         View::addNamespace('pterodactylv2', __DIR__ . '/views');
         Livewire::component('pterodactylv2.server-manager', ServerManager::class);
 
+        // Automatically unsuspend servers when renewed or expiration date extended
+        Service::saved(function (Service $service) {
+            try {
+                if ($service->product?->server?->extension !== 'PterodactylV2') {
+                    return;
+                }
+
+                if ($service->status === Service::STATUS_ACTIVE && (!$service->expires_at || $service->expires_at->isFuture())) {
+                    if ($service->wasChanged('status') || $service->wasChanged('expires_at')) {
+                        $ext = new self();
+                        $ext->unsuspendServer($service, [], []);
+                    }
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("PterodactylV2 auto-unsuspend on date extension failed: " . $e->getMessage(), [
+                    'service_id' => $service->id ?? null,
+                ]);
+            }
+        });
+
         // Register Artisan commands
         if (app()->runningInConsole()) {
             $this->commands([

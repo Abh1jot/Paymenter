@@ -25,16 +25,24 @@ class RenewServiceService
             return;
         }
 
-        if ($service->product->server) {
-            if ($service->status == Service::STATUS_SUSPENDED) {
-                UnsuspendJob::dispatch($service);
-            } elseif ($service->status == Service::STATUS_PENDING) {
-                CreateJob::dispatch($service);
-            }
-        }
+        $wasPending = ($service->status == Service::STATUS_PENDING);
 
         $service->expires_at = $service->calculateNextDueDate();
         $service->status = Service::STATUS_ACTIVE;
         $service->save();
+
+        if ($service->product?->server) {
+            if ($wasPending) {
+                CreateJob::dispatch($service);
+            } else {
+                // Immediate synchronous unsuspend to restore service right away for the user
+                try {
+                    \App\Helpers\ExtensionHelper::unsuspendServer($service);
+                } catch (\Throwable $e) {
+                    report($e);
+                    UnsuspendJob::dispatch($service);
+                }
+            }
+        }
     }
 }

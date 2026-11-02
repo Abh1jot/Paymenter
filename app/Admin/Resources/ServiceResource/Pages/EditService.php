@@ -130,4 +130,22 @@ class EditService extends EditRecord
             ServiceResource\Widgets\CancellationOverview::class,
         ];
     }
+
+    /**
+     * Automatically unsuspend remote server if the service status was changed to active
+     * or expiration date was extended into the future.
+     */
+    protected function afterSave(): void
+    {
+        $service = $this->record;
+        if ($service->product?->server) {
+            if ($service->status === Service::STATUS_ACTIVE && (!$service->expires_at || $service->expires_at->isFuture())) {
+                try {
+                    ExtensionHelper::unsuspendServer($service);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+        }
+    }
 }
