@@ -42,3 +42,30 @@
         --color-background-secondary: {{ str_replace(',', '', preg_replace('/^hsl\((.+)\)$/', '$1', theme('dark-background-secondary', '240 13% 11%'))) }};
     }
 </style>
+
+<script>
+    window.filamentChartJsPlugins = window.filamentChartJsPlugins || [];
+    window.filamentChartJsPlugins.push({
+        id: 'filamentDarkTooltipDefaultTheme',
+        beforeInit: function(chart) {
+            chart.options.plugins = chart.options.plugins || {};
+            chart.options.plugins.tooltip = chart.options.plugins.tooltip || {};
+            chart.options.plugins.tooltip.backgroundColor = '#090b10';
+            chart.options.plugins.tooltip.titleColor = '#ffffff';
+            chart.options.plugins.tooltip.bodyColor = '#cbd5e1';
+            chart.options.plugins.tooltip.borderColor = 'rgba(255, 255, 255, 0.2)';
+            chart.options.plugins.tooltip.borderWidth = 1;
+            chart.options.plugins.tooltip.cornerRadius = 8;
+            chart.options.plugins.tooltip.padding = 10;
+        },
+        beforeUpdate: function(chart) {
+            if (chart.options && chart.options.plugins && chart.options.plugins.tooltip) {
+                chart.options.plugins.tooltip.backgroundColor = '#090b10';
+                chart.options.plugins.tooltip.titleColor = '#ffffff';
+                chart.options.plugins.tooltip.bodyColor = '#cbd5e1';
+                chart.options.plugins.tooltip.borderColor = 'rgba(255, 255, 255, 0.2)';
+                chart.options.plugins.tooltip.borderWidth = 1;
+            }
+        }
+    });
+</script>
