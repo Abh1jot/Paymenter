@@ -87,7 +87,7 @@ class AdminPanelProvider extends PanelProvider
                     $defaultThemePath = base_path('themes/default/views/layouts/colors.blade.php');
                     $pathToUse = File::exists($activeThemePath) ? $activeThemePath : $defaultThemePath;
 
-                    return File::exists($pathToUse) ? Blade::render(File::get($pathToUse)) : '';
+                    return Blade::render(File::get($pathToUse));
                 }
             )
             ->navigationGroups([
