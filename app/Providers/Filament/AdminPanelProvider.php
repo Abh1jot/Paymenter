@@ -87,38 +87,7 @@ class AdminPanelProvider extends PanelProvider
                     $defaultThemePath = base_path('themes/default/views/layouts/colors.blade.php');
                     $pathToUse = File::exists($activeThemePath) ? $activeThemePath : $defaultThemePath;
 
-                    $themeColors = File::exists($pathToUse) ? Blade::render(File::get($pathToUse)) : '';
-
-                    $chartEnforcer = <<<'HTML'
-<script>
-    window.filamentChartJsPlugins = window.filamentChartJsPlugins || [];
-    window.filamentChartJsPlugins.push({
-        id: 'filamentDarkTooltipPlugin',
-        beforeInit: function(chart) {
-            chart.options.plugins = chart.options.plugins || {};
-            chart.options.plugins.tooltip = chart.options.plugins.tooltip || {};
-            chart.options.plugins.tooltip.backgroundColor = '#090b10';
-            chart.options.plugins.tooltip.titleColor = '#ffffff';
-            chart.options.plugins.tooltip.bodyColor = '#cbd5e1';
-            chart.options.plugins.tooltip.borderColor = 'rgba(255, 255, 255, 0.2)';
-            chart.options.plugins.tooltip.borderWidth = 1;
-            chart.options.plugins.tooltip.cornerRadius = 8;
-            chart.options.plugins.tooltip.padding = 10;
-        },
-        beforeUpdate: function(chart) {
-            if (chart.options && chart.options.plugins && chart.options.plugins.tooltip) {
-                chart.options.plugins.tooltip.backgroundColor = '#090b10';
-                chart.options.plugins.tooltip.titleColor = '#ffffff';
-                chart.options.plugins.tooltip.bodyColor = '#cbd5e1';
-                chart.options.plugins.tooltip.borderColor = 'rgba(255, 255, 255, 0.2)';
-                chart.options.plugins.tooltip.borderWidth = 1;
-            }
-        }
-    });
-</script>
-HTML;
-
-                    return $themeColors . "\n" . $chartEnforcer;
+                    return File::exists($pathToUse) ? Blade::render(File::get($pathToUse)) : '';
                 }
             )
             ->navigationGroups([
