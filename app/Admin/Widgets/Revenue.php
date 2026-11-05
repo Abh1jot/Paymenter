@@ -100,6 +100,19 @@ class Revenue extends ChartWidget
                     'beginAtZero' => true,
                 ],
             ],
+            'plugins' => [
+                'tooltip' => [
+                    'enabled' => true,
+                    'backgroundColor' => '#0b0f19',
+                    'titleColor' => '#ffffff',
+                    'bodyColor' => '#cbd5e1',
+                    'borderColor' => 'rgba(255, 255, 255, 0.2)',
+                    'borderWidth' => 1,
+                    'padding' => 12,
+                    'cornerRadius' => 8,
+                    'displayColors' => true,
+                ],
+            ],
         ];
     }
 
