@@ -128,4 +128,17 @@ class ServerResolver
             ]);
         }
     }
+
+    /**
+     * Check if a service has a known, valid association without making remote network calls if already cached.
+     */
+    public static function hasStoredMapping(Service $service): bool
+    {
+        $properties = $service->properties->pluck('value', 'key')->toArray();
+
+        return !empty($properties['ptero_server_id'])
+            || !empty($properties['server_id'])
+            || !empty($properties['ptero_server_uuid'])
+            || !empty($properties['ptero_identifier']);
+    }
 }
